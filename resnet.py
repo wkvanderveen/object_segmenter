@@ -90,6 +90,8 @@ def process_record_dataset(dataset, is_training, batch_size, shuffle_buffer,
 # Functions building the ResNet model.
 ########################################################################
 def batch_norm_relu(inputs, training, data_format):
+    """Performs a batch normalization followed by a ReLU."""
+    # We set fused=True for a significant performance boost.
     inputs = tf.layers.batch_normalization(
         inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
         momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
@@ -99,6 +101,22 @@ def batch_norm_relu(inputs, training, data_format):
 
 
 def fixed_padding(inputs, kernel_size, data_format):
+    """Pads the input along the spatial dimensions independently of
+    input size.
+
+    Args:
+        inputs: A tensor of size [batch, channels, height_in, width_in]
+            or [batch, height_in, width_in, channels] depending on
+            data_format.
+        kernel_size: The kernel to be used in the conv2d or max_pool2d
+            operation. Should be a positive integer.
+        data_format: The input format ('channels_last' or
+            'channels_first').
+
+    Returns:
+        A tensor with the same format as the input with the data either
+        intact (if kernel_size == 1) or padded (if kernel_size > 1).
+    """
     pad_total = kernel_size - 1
     pad_beg = pad_total // 2
     pad_end = pad_total - pad_beg
@@ -113,7 +131,10 @@ def fixed_padding(inputs, kernel_size, data_format):
 
 
 def conv2d_fixed_padding(inputs, filters, kernel_size, strides, data_format):
-
+    """Strided 2-D convolution with explicit padding."""
+    # The padding is consistent and is based only on 'kernel_size', not
+    # on the dimensions of 'inputs' (as opposed to using
+    # 'tf.layers.conv2d' alone).
     if strides > 1:
         inputs = fixed_padding(inputs, kernel_size, data_format)
 
@@ -126,10 +147,33 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides, data_format):
 
 def building_block(inputs, filters, training, projection_shortcut, strides,
     data_format):
+    """Standard building block for residual networks with BN before
+    convolutions.
+
+    Args:
+        inputs: A tensor of size [batch_channels, height_in, width_in]
+            or [batch, height_in, width_in, channels] depending on
+            data_format.
+        filters: The number of filters for the convolutions.
+        training: A boolean for whether the model is in training or
+            inference mode. Needed for batch normalization.
+        projection_shortcut: The function to use for projection
+            shortcuts (typically a 1x1 convolution when downsampling
+            the input).
+        strides: The block's stride. If greater than 1, this block will
+            ultimately downsample the input.
+        data_format: The input format ('channels_last' or
+            'channels_first').
+
+    Returns:
+        The output tensor of the block.
+    """
 
     shortcut = inputs
     inputs = batch_norm_relu(inputs, training, data_format)
 
+    # The projection shortcut should come after the first batch norm and
+    # ReLU since it performs a 1x1 convolution.
     if projection_shortcut is not None:
         shortcut = projection_shortcut(inputs)
 
@@ -147,10 +191,35 @@ def building_block(inputs, filters, training, projection_shortcut, strides,
 
 def bottleneck_block(inputs, filters, training, projection_shortcut, strides,
     data_format):
+    """Bottleneck block variant for residual networks with BN before
+    convolutions.
+
+    Args:
+        inputs: A tensor of size [batch, channels, height_in, width_in]
+            or [batch, height_in, width_in, channels] depending on
+            data_format.
+        filters: The number of filters for the first two convolutions.
+            Note that the third and final convolution will use 4 times
+            as many filters.
+        training: A Boolean for whether the model is in training or
+            inference mode. Needed for batch normalization.
+        projection_shortcut: The function to use for projection
+            shortcuts (typically a 1x1 convolution when downsampling the
+            input).
+        strides: The block's stride. If greater than 1, this block will
+            ultimately downsample the input.
+        data_format: The input format ('channels_last' or
+            'channels_first').
+
+    Returns:
+        The output tensor of the block.
+    """
 
     shortcut = inputs
     inputs = batch_norm_relu(inputs, training, data_format)
 
+    # The projection shortcut should come after the first batch norm and
+    # ReLU since it performs a 1x1 convolution.
     if projection_shortcut is not None:
         shortcut = projection_shortcut(inputs)
 
@@ -173,7 +242,33 @@ def bottleneck_block(inputs, filters, training, projection_shortcut, strides,
 
 def block_layer(inputs, filters, block_fn, blocks, strides, training, name,
     data_format):
+    """Creates one layer of blocks for the ResNet model.
 
+    Args:
+        inputs: A tensor of size [batch, channels, height_in, width_in]
+            or [batch, height_in, width_in, channels] depending on
+            data_format.
+        filters: The number of filters for the first convolution of the
+            layer.
+        block_fn: The block to use within the model, either
+            'building_block' or 'bottleneck_block'.
+        blocks: The number of blocks contained in the layer.
+        training: Either True or False, whether we are currently
+            training the model. Needed for batch norm.
+        projection_shortcut: The function to use for projection
+            shortcuts (typically a 1x1 convolution when downsampling the
+            input).
+        strides: The stride to use for the first convolution of the
+            layer. If greater than 1, this layer will ultimately
+            downsample the input.
+        name: A string name for the tensor output of the block layer.
+        data_format: The input format ('channels_last' or
+            'channels_first').
+
+    Returns:
+        The output tensor of the block.
+    """
+    # Bottleneck blocks end with 4x the number of filters
     filters_out = 4 * filters if block_fn is bottleneck_block else filters
 
     def projection_shortcut(inputs):
@@ -181,6 +276,8 @@ def block_layer(inputs, filters, block_fn, blocks, strides, training, name,
             inputs=inputs, filters=filters_out, kernel_size=1, strides=strides,
             data_format=data_format)
 
+    # Only the first block per block_layer uses projection_shortcut and
+    # strides
     inputs = block_fn(inputs, filters, training, projection_shortcut, strides,
                       data_format)
 
@@ -191,11 +288,47 @@ def block_layer(inputs, filters, block_fn, blocks, strides, training, name,
 
 
 class Model(object):
+    """Base class for building the Resnet v2 Model.
+    """
 
     def __init__(self, resnet_size, num_classes, num_filters, kernel_size,
                  conv_stride, first_pool_size, first_pool_stride,
                  second_pool_size, second_pool_stride, block_fn, block_sizes,
                  block_strides, final_size, data_format=None):
+        """Creates a model for classifying an image.
+
+        Args:
+            resnet_size: A single integer for the size of the ResNet
+                model.
+            num_classes: The number of classes used as labels.
+            num_filters: The number of filters to use for the first
+                block layer of the model. This number is then doubled
+                for each subsequent block layer.
+            kernel_size: The kernel size to use for convolution.
+            conv_stride: stride size for the initial convolutional
+                layer.
+            first_pool_size: Pool size to be used for the first pooling
+                layer. If none, the first pooling layer is skipped.
+            first_pool_stride: stride size for the first pooling layer.
+                Not used if first_pool_size is None.
+            second_pool_size: Pool size to be used for the second
+                pooling layer.
+            second_pool_stride: stride size for the final pooling layer.
+            block_fn: Which block layer function should be used? Pass in
+                one of the two functions defined above: building_block
+                or bottleneck_block.
+            block_sizes: A list containing n values, where n is the
+                number of sets of block layers desired. Each value
+                should be the number of blocks in the i-th set.
+            block_strides: List of integers representing the desired
+                stride size for each of the sets of block layers. Should
+                be same length as block_sizes.
+            final_size: The expected size of the model after the second
+                pooling.
+            data_format: Input format ('channels_last',
+                'channels_first', or None). If set to None, the format
+                is dependent on whether a GPU is available.
+        """
 
         self.resnet_size = resnet_size
 
@@ -218,8 +351,21 @@ class Model(object):
         self.final_size = final_size
 
     def __call__(self, inputs, training):
+        """Add operations to classify a batch of input images.
+
+        Args:
+            inputs: A Tensor representing a batch of input images.
+            training: A boolean. Set to True to add operations required
+                only when training the classifier.
+
+        Returns:
+            A logits Tensor with shape [<batch_size>, self.num_classes].
+        """
 
         if self.data_format == 'channels_first':
+            # Convert the inputs from channels_last (NHWC) to
+            # channels_first (NCHW). This provides a large performance
+            # boost on GPU.
             inputs = tf.transpose(inputs, [0, 3, 1, 2])
 
             inputs = conv2d_fixed_padding(inputs=inputs,
@@ -258,12 +404,35 @@ class Model(object):
         return inputs
 
 
+########################################################################
+# Functions for running training/eval/validation loops for the model.
+########################################################################
 def learning_rate_with_decay(batch_size, batch_denom, num_images,
                              boundary_epochs, decay_rates):
+    """Get a learning rate that decays step-wise as training progresses.
+
+    Args:
+        batch_size: number of examples processed in each training batch.
+        batch_denom: this value is used to scale the base learning rate.
+            '0.1 * batch size' is divided by this number, such that when
+            batch_denom == batch_size, the initial learning rate is 0.1.
+        num_images: total number of images that is used for training.
+        boundary_epochs: list of ints representing the epochs at which
+            we decay the learning rate.
+        decay_rates: list of floats representing the decay rates to be
+            used for scaling the learning rate. Should be the same
+            length as boundary_epochs.
+
+    Returns:
+        Returns a function that takes a single argument - the number of
+        batches trained so far (global_step) - and returns the learning
+        rate to be used for training the next batch.
+    """
 
     initial_learning_rate = 0.1 * batch_size / batch_denom
     batches_per_epoch = num_images / batch_size
 
+    # Multiply the learning rate by 0.1 at 100, 150, and 200 epochs.
     boundaries = [int(batches_per_epoch * epoch) for epoch in boundary_epochs]
     vals = [initial_learning_rate * decay for decay in decay_rates]
 
@@ -277,7 +446,42 @@ def learning_rate_with_decay(batch_size, batch_denom, num_images,
 def resnet_model_fn(features, labels, mode, model_class,
                     resnet_size, weight_decay, learning_rate_fn, momentum,
                     data_format, loss_filter_fn=None):
+    """Shared functionality for different resnet model_fns.
 
+    Initializes the ResnetModel representing the model layers and uses
+    that model to build the necessary EstimatorSpecs for the 'mode' in
+    question. For training, this means building losses, the optimizer,
+    and the train op that get passed into the EstimatorSpec.
+    For evaluation and prediction, the EstimatorSpec is returned without
+    a train op, but with the necessary parameters for the given mode.
+
+    Args:
+        features: tensor representing input images.
+        labels: tensor representing class labels for all input images.
+        mode: current estimator mode; should be one of
+            'tf.estimator.ModeKeys.TRAIN', 'EVALUATE', 'PREDICT'.
+        model_class: a class representing a TensorFlow model that has a
+            __call__ function. We assume here that this is a subclass of
+            ResnetModel.
+        resnet_size: A single integer for the size of the ResNet model.
+        weight_decay: weight decay loss rate used to regularize learned
+            variables.
+        learning_rate_fn: function that returns the current learning
+            rate given the current global_step.
+        momentum: momentum term used for optimization.
+        data_format: Input format ('channels_last', 'channels_first', or
+            None). If set to None, the format is dependent on whether a
+            GPU is available.
+        loss_filter_fn: function that takes a string variable name and
+            returns True if the var should be included in loss
+            calculation, and False otherwise. If None,
+            batch_normalization variables is excluded from the loss.
+    Returns:
+        EstimatorSpec parameterized according to the input params and
+        the current mode.
+    """
+
+    # Generate a summary node for the images
     tf.summary.image('images', features, max_outputs=6)
 
     model = model_class(resnet_size, data_format)
@@ -291,16 +495,23 @@ def resnet_model_fn(features, labels, mode, model_class,
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
+    # Calculate loss, which includes softmax cross entropy and L2
+    # regularization.
     cross_entropy = tf.losses.softmax_cross_entropy(
         logits=logits, onehot_labels=labels)
 
+    # Create a tensor named cross_entropy for logging purposes.
     tf.identity(cross_entropy, name='cross_entropy')
     tf.summary.scalar('cross_entropy', cross_entropy)
 
+    # If no loss_filter_fn is passed, assume we want the default
+    # behavior, which is that batch_normalization variables are excluded
+    # from loss.
     if not loss_filter_fn:
         def loss_filter_fn(name):
             return 'batch_normalization' not in name
 
+    # Add weight decay to the loss.
     loss = cross_entropy + weight_decay * tf.add_n(
         [tf.nn.l2_loss(v) for v in tf.trainable_variables()
             if loss_filter_fn(v.name)])
@@ -310,6 +521,7 @@ def resnet_model_fn(features, labels, mode, model_class,
 
         learning_rate = learning_rate_fn(global_step)
 
+        # Create a tensor named learning_rate for logging purposes.
         tf.identity(learning_rate, name='learning_rate')
         tf.summary.scalar('learning_rate', learning_rate)
 
@@ -317,6 +529,8 @@ def resnet_model_fn(features, labels, mode, model_class,
             learning_rate=learning_rate,
             momentum=momentum)
 
+        # Batch norm requires update ops to be added as a dependency to
+        # train_op.
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
             train_op = optimizer.minimize(loss, global_step)
@@ -327,6 +541,7 @@ def resnet_model_fn(features, labels, mode, model_class,
         tf.argmax(labels, axis=1), predictions['classes'])
     metrics = {'accuracy': accuracy}
 
+    # Create a tensor named train_accuracy for logging purposes.
     tf.identity(accuracy[1], name='train_accuracy')
     tf.summary.scalar('train_accuracy', accuracy[1])
 
@@ -338,8 +553,11 @@ def resnet_model_fn(features, labels, mode, model_class,
 
 
 def resnet_main(flags, model_function, input_function):
+    # Using the Winograd non-fused algorithms provides a small
+    # performance boost.
     os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
 
+    # Set up a RunConfig to only save checkpoints once per training cycle.
     run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
     classifier = tf.estimator.Estimator(
         model_fn=model_function, model_dir=flags.model_dir, config=run_config,
@@ -369,6 +587,7 @@ def resnet_main(flags, model_function, input_function):
 
     print('Starting to evaluate.')
 
+    # Evaluate the model and print results
     def input_fn_eval():
         return input_function(False, flags.data_dir, flags.batch_size,
                               1, flags.num_parallel_calls)
@@ -378,6 +597,8 @@ def resnet_main(flags, model_function, input_function):
 
 
 class ResnetArgParser(argparse.ArgumentParser):
+    """Arguments for configuring and running a Resnet Model.
+    """
 
     def __init__(self, resnet_size_choices=None):
         super(ResnetArgParser, self).__init__()
