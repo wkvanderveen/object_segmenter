@@ -1,0 +1,13 @@
+model_dir = './model_data/'
+img_width = 32
+img_height = 32
+img_channels = 3
+train_percentage = 80
+max_img = 100
+batch_size = 2
+num_epochs_train = 20
+num_epochs_eval = 10
+steps = 1
+learning_rate = 0.01
+num_hidden = 50
+dropout_rate = 0.4
