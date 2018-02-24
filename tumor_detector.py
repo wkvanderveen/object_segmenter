@@ -6,47 +6,45 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import parameters as par
+import matplotlib.pyplot as plt
 import cv2
 import random as rand
-import time
-import matplotlib.pyplot as plt
-import scipy.signal as spsig
 import os
 
-# Suppress warnings
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-# Clear the terminal
-os.system('cls' if os.name == 'nt' else 'clear')
-# Display tensorflow info
-tf.logging.set_verbosity(tf.logging.INFO)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'    # suppress warnings
+tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
+
+def display_image(img):
+    plt.imshow(img)
+    plt.show()
 
 
 def read_images():
-
-    filenames = []
-    seg_tensors = []
-    img_tensors = []
-
-    # Encode data
     seg_dir = './VOC2012-objects/SegmentationObject/'
     img_dir = './VOC2012-objects/JPEGImages/'
+
+    n_files = 0
+    seg = []
+    img = []
+
     for seg_file in os.listdir(seg_dir):
         filename = seg_file.split('.')[0]
-        if len(filenames) > par.max_img:
+
+        if n_files > par.max_img:
             break
         if not os.path.isfile(img_dir + filename + '.jpg'):
             continue
-        print("Now encoding image with filename {}".format(filename))
-        filenames.append(filename)
 
-        resized_seg = cv2.resize(src=cv2.imread(seg_dir + seg_file),
-                                 dsize=(par.img_width, par.img_height))
-        resized_img = cv2.resize(src=cv2.imread(img_dir + filename + '.jpg'),
-                                 dsize=(par.img_width, par.img_height))
+        n_files += 1
+        print(f"Now reading file {img_dir}{filename}...")
 
-        resized_seg = resized_seg.reshape(par.img_width, par.img_height, 3)
-        resized_img = resized_img.reshape(par.img_width, par.img_height, 3)
+        resized_seg = cv2.resize(
+            src=cv2.imread(seg_dir + seg_file),
+            dsize=(par.img_width, par.img_height))
+        resized_img = cv2.resize(
+            src=cv2.imread(img_dir + filename + '.jpg'),
+            dsize=(par.img_width, par.img_height))
 
         resized_seg = np.asarray(resized_seg)
         resized_img = np.asarray(resized_img)
@@ -54,29 +52,42 @@ def read_images():
         resized_seg = resized_seg.astype(float) / 255
         resized_img = resized_img.astype(float) / 255
 
-        seg_tensors.append(tf.convert_to_tensor(resized_seg, np.float32))
-        img_tensors.append(tf.convert_to_tensor(resized_img, np.float32))
+        seg.append(resized_seg)
+        img.append(resized_img)
 
-    total_img = len(filenames)
-    n_train = par.train_percentage/100 * total_img
+    n_train = int(par.train_percentage / 100 * n_files)
+    n_test = n_files - n_train
 
-    train_img = []
-    train_seg = []
-    test_img = []
-    test_seg = []
+    train_img = np.zeros(shape=(n_train,
+                                par.img_width,
+                                par.img_height,
+                                par.img_channels))
+    train_seg = np.zeros(shape=(n_train,
+                                par.img_width,
+                                par.img_height,
+                                par.img_channels))
+    test_img = np.zeros(shape=(n_test,
+                               par.img_width,
+                               par.img_height,
+                               par.img_channels))
+    test_seg = np.zeros(shape=(n_test,
+                               par.img_width,
+                               par.img_height,
+                               par.img_channels))
 
-    for rand_idx in rand.sample(range(total_img), total_img):
-        if len(train_img) < n_train:
-            train_img.append(img_tensors[rand_idx])
-            train_seg.append(seg_tensors[rand_idx])
+    count_train = 0
+    count_test = 0
+
+    for rand_idx in rand.sample(range(n_files), n_files):
+        if count_train < n_train:
+            train_img[count_train] = img[rand_idx]
+            train_seg[count_train] = seg[rand_idx]
+            count_train += 1
         else:
-            test_img.append(img_tensors[rand_idx])
-            test_seg.append(seg_tensors[rand_idx])
+            test_img[count_test] = img[rand_idx]
+            test_seg[count_test] = seg[rand_idx]
+            count_test += 1
 
-    train_img = tf.data.Dataset.from_tensors(train_img)
-    train_seg = tf.data.Dataset.from_tensors(train_seg)
-    test_img = tf.data.Dataset.from_tensors(test_img)
-    test_seg = tf.data.Dataset.from_tensors(test_seg)
     return train_img, train_seg, test_img, test_seg
 
 
@@ -84,8 +95,8 @@ def model_fn(features, labels, mode):
     """Model function."""
 
     # Input layer
-    input_layer = tf.reshape(features["x"],
-                             [-1, par.img_width, par.img_height, 3])
+    input_layer = tf.reshape(
+        features["x"], [-1, par.img_width * par.img_height * par.img_channels])
 
     dense = tf.layers.dense(inputs=input_layer,
                             units=par.num_hidden,
@@ -95,13 +106,24 @@ def model_fn(features, labels, mode):
                                 rate=par.dropout_rate,
                                 training=mode == tf.estimator.ModeKeys.TRAIN)
 
-    # Logits layer
-    output_layer = tf.layers.dense(inputs=dropout,
-                                   units=par.img_width * par.img_height * 3)
+    output_layer = tf.layers.dense(
+        inputs=dropout,
+        units=par.img_width * par.img_height * par.img_channels,
+        activation=tf.nn.relu)
+
+    output = tf.reshape(output_layer,
+                        [-1, par.img_width, par.img_height, par.img_channels])
+
+    predictions = {
+        "seg_out": output
+    }
+
+    if mode == tf.estimator.ModeKeys.PREDICT:
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
     # Calculate loss (for both TRAIN and EVAL modes)
     loss = tf.losses.absolute_difference(labels=labels,
-                                         predictions=output_layer)
+                                         predictions=output)
 
     # Configure the training op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
@@ -117,7 +139,8 @@ def model_fn(features, labels, mode):
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(labels=labels)}
+        "accuracy": tf.metrics.accuracy(labels=labels,
+                                        predictions=predictions["seg_out"])}
 
     return tf.estimator.EstimatorSpec(mode=mode,
                                       loss=loss,
@@ -126,17 +149,16 @@ def model_fn(features, labels, mode):
 
 def main(config):
 
+    # Optionally overwrite existing metadata by removing its folder
+    if par.overwrite_existing_model:
+        par.rem_existing_model()
+
     # Load training and eval data
     train_img, train_seg, test_img, test_seg = read_images()
 
     # Create the Estimator
-    segmentation_network = tf.estimator.Estimator(model_fn=model_fn,
-                                                  model_dir=par.model_dir)
-
-    # Set up logging for predictions
-    tensors_to_log = {"probabilities": "softmax_tensor"}
-    logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, at_end=True)
+    tumor_detector = tf.estimator.Estimator(model_fn=model_fn,
+                                            model_dir=par.model_dir)
 
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -146,10 +168,9 @@ def main(config):
         num_epochs=par.num_epochs_train,
         shuffle=True)
 
-    segmentation_network.train(input_fn=train_input_fn,
-                               steps=par.steps,
-                               hooks=[logging_hook])
-"""
+    tumor_detector.train(input_fn=train_input_fn,
+                         steps=par.steps)
+
     # Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": test_img},
@@ -157,8 +178,19 @@ def main(config):
         num_epochs=par.num_epochs_eval,
         shuffle=False)
 
-    print(segmentation_network.evaluate(input_fn=eval_input_fn))
-"""
+    print(tumor_detector.evaluate(input_fn=eval_input_fn))
+
+    single_image = test_img[:1]
+    display_image(single_image[0, :, :, :])
+
+    plot_input_fn = tf.estimator.inputs.numpy_input_fn(
+        x={"x": single_image},
+        batch_size=1,
+        shuffle=False)
+
+    for single_predict in tumor_detector.predict(plot_input_fn):
+        display_image(single_predict["seg_out"])
+
+
 if __name__ == "__main__":
     tf.app.run()
-
