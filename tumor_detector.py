@@ -9,18 +9,24 @@ import parameters as par
 import matplotlib.pyplot as plt
 import cv2
 import random as rand
+import time
 import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'    # suppress warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
-np.set_printoptions(threshold=np.nan)       # print image, no ellipsis
 
 
 def display_prediction(imgs):
-    """Display one or two images."""
-    cmaps = [None, 'binary', 'gray']
+    """Display input, prediction, and label images."""
+
+    # Set color maps for the input, prediction, and label images.
+    cmaps = [None, 'gray', 'gray']
+
+    # Initialize figure
     fig = plt.figure()
-    for img in range(len(imgs)):
+
+    # Add the three images as subplots
+    for img in range(3):
         sub = fig.add_subplot(1, 3, img+1)
         sub.set_title(['Input', 'Prediction', 'Label'][img])
         plt.imshow(imgs[img], cmap=cmaps[img])
@@ -33,42 +39,58 @@ def read_images():
     of the train and test sets.
     """
 
-    seg_dir = './VOC2012-objects/SegmentationObject/'
+    # Set directories containing the images and segmentation objects.
     img_dir = './VOC2012-objects/JPEGImages/'
+    seg_dir = './VOC2012-objects/SegmentationObject/'
+
+    # Initialize the lists where the input and segmentation images will
+    # be stored.
+    img = []
+    seg = []
 
     n_files = 0
-    seg = []
-    img = []
 
+    # Append the input and segmentation images to the respective lists.
     for seg_file in os.listdir(seg_dir):
         filename = seg_file.split('.')[0]
 
+        # Stop adding more images if the image limit is reached.
         if n_files > par.max_img:
             break
+
+        # If the input image that corresponds to this segmentation image
+        # cannot be located, then skip this segmentation image.
         if not os.path.isfile(img_dir + filename + '.jpg'):
             continue
 
-        n_files += 1
-        print(f"Now reading file {img_dir}{filename}...")
+        print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
+              end='\r',
+              flush=True)
 
+        n_files += 1
+
+        # Read the images from their files
+        current_seg = cv2.imread(seg_dir + seg_file)
+        current_img = cv2.imread(img_dir + filename + '.jpg')
+
+        # Resize the images to the standard size (from the parameters)
         resized_seg = cv2.resize(
-            src=cv2.imread(seg_dir + seg_file),
+            src=current_seg,
             dsize=(par.img_width, par.img_height))
         resized_img = cv2.resize(
-            src=cv2.imread(img_dir + filename + '.jpg'),
+            src=current_img,
             dsize=(par.img_width, par.img_height))
 
-        resized_seg = np.asarray(resized_seg)
-        resized_img = np.asarray(resized_img)
-
-        resized_seg = resized_seg.astype(float) / 255
-        resized_img = resized_img.astype(float) / 255
-
+        # Convert segmentation image to binary color format.
         resized_seg = np.ceil(np.mean(resized_seg, axis=2))
 
+        # Append resized images to their respecive lists.
         seg.append(resized_seg)
         img.append(resized_img)
 
+    print("\nReading images completed!\n")
+
+    # Initialize numpy arrays
     n_train = int(par.train_percentage / 100 * n_files)
     n_test = n_files - n_train
 
@@ -87,18 +109,26 @@ def read_images():
                                par.img_width,
                                par.img_height))
 
-    count_train = 0
-    count_test = 0
+    c_train = 0
+    c_test = 0
 
+    # Randomly bifurcate the input and segmentation images into  a train
+    # and test set.
     for rand_idx in rand.sample(range(n_files), n_files):
-        if count_train < n_train:
-            train_img[count_train] = img[rand_idx]
-            train_seg[count_train] = seg[rand_idx]
-            count_train += 1
+        print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
+              end='\r',
+              flush=True)
+
+        # Store images in train or test set, depending on whether the
+        # limit for the training images is reached.
+        if c_train < n_train:
+            train_img[c_train] = img[rand_idx]
+            train_seg[c_train] = seg[rand_idx]
+            c_train += 1
         else:
-            test_img[count_test] = img[rand_idx]
-            test_seg[count_test] = seg[rand_idx]
-            count_test += 1
+            test_img[c_test] = img[rand_idx]
+            test_seg[c_test] = seg[rand_idx]
+            c_test += 1
 
     return train_img, train_seg, test_img, test_seg
 
@@ -167,6 +197,9 @@ def main(config):
     if par.overwrite_existing_model:
         par.rem_existing_model()
 
+    # Start timer
+    start_time = time.time()
+
     # Load training and testing data
     train_img, train_seg, test_img, test_seg = read_images()
 
@@ -194,10 +227,13 @@ def main(config):
 
     print(tumor_detector.evaluate(input_fn=eval_input_fn))
 
+    # Print time elapsed
+    print(time.strftime(
+        "Time elapsed: %H:%M:%S", time.gmtime(int(time.time() - start_time))))
+
     # Optionally predict a random test image
     if par.predict:
         single_image = test_img[:1]
-        print(test_seg.shape)
 
         plot_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": single_image},
@@ -208,6 +244,7 @@ def main(config):
             display_prediction([single_image[0, :, :, :],
                                 single_predict["seg_out"],
                                 test_seg[0, :, :]])
+
 
 if __name__ == "__main__":
     tf.app.run()
