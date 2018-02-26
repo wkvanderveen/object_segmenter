@@ -71,7 +71,9 @@ def read_images():
 
         # Read the images from their files
         current_seg = cv2.imread(seg_dir + seg_file)
-        current_img = cv2.imread(img_dir + filename + '.jpg')
+
+        current_img = cv2.cvtColor(cv2.imread(img_dir + filename + '.jpg'),
+                                   cv2.COLOR_BGR2RGB)
 
         # Resize the images to the standard size (from the parameters)
         resized_seg = cv2.resize(
@@ -84,7 +86,7 @@ def read_images():
         # Convert segmentation image to binary color format.
         resized_seg = np.ceil(np.mean(resized_seg, axis=2))
 
-        # Append resized images to their respecive lists.
+        # Append resized images to their respective lists.
         seg.append(resized_seg)
         img.append(resized_img)
 
@@ -97,17 +99,21 @@ def read_images():
     train_img = np.zeros(shape=(n_train,
                                 par.img_width,
                                 par.img_height,
-                                par.img_channels))
+                                par.img_channels),
+                         dtype=np.float32)
     train_seg = np.zeros(shape=(n_train,
                                 par.img_width,
-                                par.img_height))
+                                par.img_height),
+                         dtype=np.float32)
     test_img = np.zeros(shape=(n_test,
                                par.img_width,
                                par.img_height,
-                               par.img_channels))
+                               par.img_channels),
+                        dtype=np.float32)
     test_seg = np.zeros(shape=(n_test,
                                par.img_width,
-                               par.img_height))
+                               par.img_height),
+                        dtype=np.float32)
 
     c_train = 0
     c_test = 0
@@ -138,28 +144,66 @@ def model_fn(features, labels, mode):
 
     # Input layer
     input_layer = tf.reshape(
-        features["x"], [-1, par.img_width * par.img_height * par.img_channels])
+        features["x"], [-1, par.img_width, par.img_height, par.img_channels])
 
-    # Dense layer
-    dense = tf.layers.dense(inputs=input_layer,
-                            units=par.num_hidden,
-                            activation=tf.nn.relu)
+    # Down block
+    conv1 = tf.layers.conv2d(name="Conv1_layer",
+                             inputs=input_layer,
+                             filters=par.num_filters,
+                             kernel_size=[5, 5],
+                             padding="same")
 
-    # Dropout layer
-    dropout = tf.layers.dropout(inputs=dense,
-                                rate=par.dropout_rate,
-                                training=mode == tf.estimator.ModeKeys.TRAIN)
+    conv_norm1 = tf.layers.batch_normalization(inputs=conv1,
+                                               name="Batch_normalization1")
 
-    # Output layer
-    output_layer = tf.layers.dense(
-        inputs=dropout,
-        units=par.img_width * par.img_height,
-        activation=tf.nn.relu)
+    dense1 = tf.layers.dense(inputs=conv_norm1,
+                             units=par.num_hidden,
+                             activation=tf.nn.relu,
+                             name="Dense1")
+
+
+    dil = tf.layers.conv2d(name="Dilation",
+                           inputs=dense1,
+                           filters=par.num_filters,
+                           kernel_size=[5, 5],
+                           padding="same",
+                           dilation_rate=(2, 2))
+
+    #################################################################
+    # Up block
+    conv2 = tf.layers.conv2d(name="Conv2_layer",
+                             inputs=dil,
+                             filters=par.num_filters,
+                             kernel_size=[5, 5],
+                             padding="same")
+
+    conv_norm2 = tf.layers.batch_normalization(inputs=conv2,
+                                               name="Batch_normalization2")
+
+    dense2 = tf.layers.dense(inputs=conv_norm2,
+                             units=par.num_hidden,
+                             activation=tf.nn.relu,
+                             name="Dense2")
+
+    deconv = tf.layers.conv2d_transpose(inputs=dense2,
+                                        filters=par.num_filters,
+                                        kernel_size=[5, 5],
+                                        padding="same",
+                                        name="Deconv")
+    print(f"\n\nAfter deconv shape is {deconv.shape}.\n\n")
 
     # Output images
-    output = tf.reshape(output_layer,
+
+    dense = tf.layers.dense(inputs=deconv,
+                            units=1,
+                            activation=tf.nn.relu,
+                            name="Final_dense")
+    print(f"\n\nAfter dense shape is {dense.shape}.\n\n")
+
+    output = tf.reshape(dense,
                         [-1, par.img_width, par.img_height])
 
+    print(f"\n\nAfter output shape is {output.shape}.\n\n")
     # Save the output (for PREDICT mode)
     predictions = {"seg_out": output}
     if mode == tf.estimator.ModeKeys.PREDICT:
