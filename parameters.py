@@ -2,19 +2,22 @@ import os
 from shutil import rmtree
 
 overwrite_existing_model = True
+predict = True
 model_dir = './model_data/'
-img_width = 64
-img_height = 64
+img_width = 128
+img_height = 128
 img_channels = 3
+seg_channels = 1
 train_percentage = 80
-max_img = 1000
-batch_size = 50
-num_epochs_train = 500
-num_epochs_eval = 10
-steps = 200
+max_img = 200
+batch_size = 20
+num_epochs_train = 50
+num_epochs_eval = 5
+steps = 20
 learning_rate = 0.1
-num_hidden = 200
+num_hidden = 100
 dropout_rate = 0.1
+seg_threshold = 0.5
 
 
 def rem_existing_model():

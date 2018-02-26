@@ -13,14 +13,26 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'    # suppress warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
+np.set_printoptions(threshold=np.nan)       # print image, no ellipsis
 
 
-def display_image(img):
-    plt.imshow(img)
+def display_prediction(imgs):
+    """Display one or two images."""
+    cmaps = [None, 'binary', 'gray']
+    fig = plt.figure()
+    for img in range(len(imgs)):
+        sub = fig.add_subplot(1, 3, img+1)
+        sub.set_title(['Input', 'Prediction', 'Label'][img])
+        plt.imshow(imgs[img], cmap=cmaps[img])
+        plt.axis('off')
     plt.show()
 
 
 def read_images():
+    """Read the input-output pairs from folder and return numpy arrays
+    of the train and test sets.
+    """
+
     seg_dir = './VOC2012-objects/SegmentationObject/'
     img_dir = './VOC2012-objects/JPEGImages/'
 
@@ -52,6 +64,8 @@ def read_images():
         resized_seg = resized_seg.astype(float) / 255
         resized_img = resized_img.astype(float) / 255
 
+        resized_seg = np.ceil(np.mean(resized_seg, axis=2))
+
         seg.append(resized_seg)
         img.append(resized_img)
 
@@ -64,16 +78,14 @@ def read_images():
                                 par.img_channels))
     train_seg = np.zeros(shape=(n_train,
                                 par.img_width,
-                                par.img_height,
-                                par.img_channels))
+                                par.img_height))
     test_img = np.zeros(shape=(n_test,
                                par.img_width,
                                par.img_height,
                                par.img_channels))
     test_seg = np.zeros(shape=(n_test,
                                par.img_width,
-                               par.img_height,
-                               par.img_channels))
+                               par.img_height))
 
     count_train = 0
     count_test = 0
@@ -92,32 +104,34 @@ def read_images():
 
 
 def model_fn(features, labels, mode):
-    """Model function."""
+    """Model function of the segmentation network."""
 
     # Input layer
     input_layer = tf.reshape(
         features["x"], [-1, par.img_width * par.img_height * par.img_channels])
 
+    # Dense layer
     dense = tf.layers.dense(inputs=input_layer,
                             units=par.num_hidden,
                             activation=tf.nn.relu)
 
+    # Dropout layer
     dropout = tf.layers.dropout(inputs=dense,
                                 rate=par.dropout_rate,
                                 training=mode == tf.estimator.ModeKeys.TRAIN)
 
+    # Output layer
     output_layer = tf.layers.dense(
         inputs=dropout,
-        units=par.img_width * par.img_height * par.img_channels,
+        units=par.img_width * par.img_height,
         activation=tf.nn.relu)
 
+    # Output images
     output = tf.reshape(output_layer,
-                        [-1, par.img_width, par.img_height, par.img_channels])
+                        [-1, par.img_width, par.img_height])
 
-    predictions = {
-        "seg_out": output
-    }
-
+    # Save the output (for PREDICT mode)
+    predictions = {"seg_out": output}
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
@@ -149,11 +163,11 @@ def model_fn(features, labels, mode):
 
 def main(config):
 
-    # Optionally overwrite existing metadata by removing its folder
+    # Optionally overwrite existing metadata by removing its directory
     if par.overwrite_existing_model:
         par.rem_existing_model()
 
-    # Load training and eval data
+    # Load training and testing data
     train_img, train_seg, test_img, test_seg = read_images()
 
     # Create the Estimator
@@ -180,17 +194,20 @@ def main(config):
 
     print(tumor_detector.evaluate(input_fn=eval_input_fn))
 
-    single_image = test_img[:1]
-    display_image(single_image[0, :, :, :])
+    # Optionally predict a random test image
+    if par.predict:
+        single_image = test_img[:1]
+        print(test_seg.shape)
 
-    plot_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={"x": single_image},
-        batch_size=1,
-        shuffle=False)
+        plot_input_fn = tf.estimator.inputs.numpy_input_fn(
+            x={"x": single_image},
+            batch_size=1,
+            shuffle=False)
 
-    for single_predict in tumor_detector.predict(plot_input_fn):
-        display_image(single_predict["seg_out"])
-
+        for single_predict in tumor_detector.predict(plot_input_fn):
+            display_prediction([single_image[0, :, :, :],
+                                single_predict["seg_out"],
+                                test_seg[0, :, :]])
 
 if __name__ == "__main__":
     tf.app.run()
