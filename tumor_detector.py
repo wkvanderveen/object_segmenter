@@ -16,6 +16,29 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'    # suppress warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
 
+def predict_image(input_, output, pred_fn):
+    """Generate output from an input image and a prediction function."""
+
+    pred_input_fn = tf.estimator.inputs.numpy_input_fn(
+        x={"x": input_},
+        batch_size=1,
+        shuffle=False)
+
+    for single_predict in pred_fn(pred_input_fn):
+        imgs = [input_[0, :, :], single_predict["seg_out"], output[0, :, :]]
+
+    # Initialize figure
+    fig = plt.figure()
+
+    # Add the three images as subplots
+    for img in range(3):
+        sub = fig.add_subplot(1, 3, img+1)
+        sub.set_title(['Input', 'Prediction', 'Label'][img])
+        plt.imshow(imgs[img], cmap='gray')
+        plt.axis('off')
+    plt.show()
+
+
 def plot_conv(filters):
     n_filters = filters.shape[3]
 
@@ -47,21 +70,6 @@ def plot_conv(filters):
         ax.set_xticks([])
         ax.set_yticks([])
 
-    plt.show()
-
-
-def display_prediction(imgs):
-    """Display input, prediction, and label images."""
-
-    # Initialize figure
-    fig = plt.figure()
-
-    # Add the three images as subplots
-    for img in range(3):
-        sub = fig.add_subplot(1, 3, img+1)
-        sub.set_title(['Input', 'Prediction', 'Label'][img])
-        plt.imshow(imgs[img], cmap='gray')
-        plt.axis('off')
     plt.show()
 
 
@@ -251,7 +259,7 @@ def model_fn(features, labels, mode):
 
     # Configure the training op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.GradientDescentOptimizer(
+        optimizer = tf.train.AdadeltaOptimizer(
             learning_rate=par.learning_rate)
 
         train_op = optimizer.minimize(loss=loss,
@@ -313,17 +321,9 @@ def main(config):
 
     # Optionally predict a random test image
     if par.predict:
-        single_image = test_img[:1]
-
-        pred_input_fn = tf.estimator.inputs.numpy_input_fn(
-            x={"x": single_image},
-            batch_size=1,
-            shuffle=False)
-
-        for single_predict in tumor_detector.predict(pred_input_fn):
-            display_prediction([test_img[0, :, :],
-                                single_predict["seg_out"],
-                                test_seg[0, :, :]])
+        predict_image(input_=test_img[:1],
+                      output=test_seg[:1],
+                      pred_fn=tumor_detector.predict)
 
     if par.plot_layers["Any"]:
         if par.plot_layers["Conv1"]:

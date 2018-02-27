@@ -2,27 +2,26 @@ import os
 import math
 from shutil import rmtree
 
-overwrite_existing_model = True
+overwrite_existing_model = False
 predict = True
 model_dir = './model_data/'
-img_width = 32
-img_height = 32
-train_percentage = 80
-max_img = 64
-batch_size = 5
+img_width = 128
+img_height = 128
+train_percentage = 95
+max_img = 5000
+batch_size = 10
 num_epochs_train = 100
 num_epochs_eval = 5
-steps = 300
-learning_rate = 0.01
+steps = 100
+learning_rate = 0.02
 num_hidden = 64
 num_filters = 8
-filter_size = [5, 5]
+filter_size = [8, 8]
 dropout_rate = 0.4
 seg_threshold = 0.5
 
-
 plot_layers = {
-    "Any":      False,
+    "Any":      True,
     "Conv1":    True,
     "Dilated":  True,
     "Conv2":    True,
