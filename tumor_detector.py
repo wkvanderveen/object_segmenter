@@ -12,7 +12,7 @@ import random as rand
 import time
 import os
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'    # suppress warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
 
@@ -102,9 +102,9 @@ def read_images():
         if not os.path.isfile(img_dir + filename + '.jpg'):
             continue
 
-        #print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
-        #      end='\r',
-        #      flush=True)
+        print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
+              end='\r',
+              flush=True)
 
         n_files += 1
 
@@ -164,9 +164,9 @@ def read_images():
     # Randomly bifurcate the input and segmentation images into  a train
     # and test set.
     for rand_idx in rand.sample(range(n_files), n_files):
-        # print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
-        #       end='\r',
-        #       flush=True)
+        print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
+              end='\r',
+              flush=True)
 
         # Store images in train or test set, depending on whether the
         # limit for the training images is reached.
@@ -189,63 +189,77 @@ def model_fn(features, labels, mode):
     input_layer = tf.reshape(
         features["x"], [-1, par.img_width, par.img_height, 1])
 
+    upward_conv_layers = []
+    upward_dense_layers = []
+    downward_conv_layers = []
+    downward_dense_layers = []
+    shape_layers = []
+    upconv = []
+
+    for block_idx in range(par.block_depth):
+        # Initialize number of conv layers
+        downward_dense_layers.append([])
+        downward_conv_layers.append([])
+
+        if block_idx is not 0:
+            shape_layers.append(tf.layers.conv2d(
+                inputs=downward_dense_layers[block_idx-1][par.layer_depth-1],
+                filters=par.num_filters,
+                kernel_size=par.filter_size,
+                padding="same",
+                dilation_rate=(2, 2),
+                bias_initializer=tf.random_normal_initializer))
+        else:
+            shape_layers.append(input_layer)
+
+        for layer_idx in range(par.layer_depth):
+            downward_conv_layers[block_idx].append(tf.layers.conv2d(
+                inputs=shape_layers[block_idx] if layer_idx == 0 else downward_dense_layers[block_idx][layer_idx-1],
+                filters=par.num_filters,
+                kernel_size=par.filter_size,
+                padding="same",
+                bias_initializer=tf.random_normal_initializer))
+
+            downward_dense_layers[block_idx].append(tf.layers.dense(
+                inputs=downward_conv_layers[block_idx][layer_idx],
+                units=par.num_hidden,
+                activation=tf.nn.relu,
+                bias_initializer=tf.random_normal_initializer))
+
+    for block_idx in range(par.block_depth-1):
+        upward_dense_layers.append([])
+        upward_conv_layers.append([])
+
+        # If previous layer is deepest, grab from downward layers.
+        # Else, grab from previous upward
+        upconv.append(tf.layers.conv2d_transpose(
+            inputs=downward_dense_layers[par.block_depth-1][par.layer_depth-1] if block_idx == 0 else upward_dense_layers[block_idx-1][par.layer_depth-1],
+            filters=par.num_filters,
+            kernel_size=par.filter_size,
+            padding="same"))
+
+        for layer_idx in range(par.layer_depth):
+            upward_conv_layers[block_idx].append(tf.layers.conv2d(
+                inputs=upconv[block_idx] if layer_idx == 0 else upward_dense_layers[block_idx][layer_idx-1],
+                filters=par.num_filters,
+                kernel_size=par.filter_size,
+                padding="same",
+                bias_initializer=tf.random_normal_initializer))
+
+            upward_dense_layers[block_idx].append(tf.layers.dense(
+                inputs=upward_conv_layers[block_idx][layer_idx],
+                units=par.num_hidden,
+                activation=tf.nn.relu,
+                bias_initializer=tf.random_normal_initializer))
+
+    output_dense = tf.layers.dense(
+        inputs=upward_dense_layers[par.block_depth-2][par.layer_depth-1],
+        units=1,
+        activation=tf.nn.relu,
+        bias_initializer=tf.random_normal_initializer)
+
     # Down block
-    conv1 = tf.layers.conv2d(name="Conv1_layer",
-                             inputs=input_layer,
-                             filters=par.num_filters,
-                             kernel_size=par.filter_size,
-                             padding="same",
-                             bias_initializer=tf.random_normal_initializer)
-
-    conv_norm1 = tf.layers.batch_normalization(inputs=conv1,
-                                               name="Batch_normalization1")
-
-    dense1 = tf.layers.dense(inputs=conv_norm1,
-                             units=par.num_hidden,
-                             activation=tf.nn.relu,
-                             name="Dense1",
-                             bias_initializer=tf.random_normal_initializer)
-
-    dil = tf.layers.conv2d(name="Dilation",
-                           inputs=dense1,
-                           filters=par.num_filters,
-                           kernel_size=par.filter_size,
-                           padding="same",
-                           dilation_rate=(2, 2),
-                           bias_initializer=tf.random_normal_initializer)
-
-    #################################################################
-    # Up block
-    conv2 = tf.layers.conv2d(name="Conv2_layer",
-                             inputs=dil,
-                             filters=par.num_filters,
-                             kernel_size=par.filter_size,
-                             padding="same",
-                             bias_initializer=tf.random_normal_initializer)
-
-    conv_norm2 = tf.layers.batch_normalization(inputs=conv2,
-                                               name="Batch_normalization2")
-
-    dense2 = tf.layers.dense(inputs=conv_norm2,
-                             units=par.num_hidden,
-                             activation=tf.nn.relu,
-                             name="Dense2")
-
-    deconv = tf.layers.conv2d_transpose(inputs=dense2,
-                                        filters=par.num_filters,
-                                        kernel_size=par.filter_size,
-                                        padding="same",
-                                        name="Deconv")
-
-    # Output images
-
-    dense3 = tf.layers.dense(inputs=deconv,
-                             units=1,
-                             activation=tf.nn.relu,
-                             name="Dense3",
-                             bias_initializer=tf.random_normal_initializer)
-
-    output = tf.reshape(dense3,
+    output = tf.reshape(output_dense,
                         [-1, par.img_width, par.img_height])
 
     # Save the output (for PREDICT mode)
@@ -258,8 +272,13 @@ def model_fn(features, labels, mode):
                                         predictions=output)
 
     # Configure the training op (for TRAIN mode)
+    optimizers = {
+        "GradientDescent":  tf.train.GradientDescentOptimizer,
+        "Adadelta":         tf.train.AdadeltaOptimizer
+    }
+
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.AdadeltaOptimizer(
+        optimizer = optimizers[par.optimizer](
             learning_rate=par.learning_rate)
 
         train_op = optimizer.minimize(loss=loss,
