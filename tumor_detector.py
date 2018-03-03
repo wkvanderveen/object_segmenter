@@ -102,9 +102,9 @@ def read_images():
         if not os.path.isfile(img_dir + filename + '.jpg'):
             continue
 
-        print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
-              end='\r',
-              flush=True)
+        #print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
+        #      end='\r',
+        #      flush=True)
 
         n_files += 1
 
@@ -164,9 +164,9 @@ def read_images():
     # Randomly bifurcate the input and segmentation images into  a train
     # and test set.
     for rand_idx in rand.sample(range(n_files), n_files):
-        print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
-              end='\r',
-              flush=True)
+        #print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
+        #      end='\r',
+        #      flush=True)
 
         # Store images in train or test set, depending on whether the
         # limit for the training images is reached.
@@ -340,8 +340,8 @@ def main(config):
 
     # Optionally predict a random test image
     if par.predict:
-        predict_image(input_=test_img[:1],
-                      output=test_seg[:1],
+        predict_image(input_=train_img[:1],
+                      output=train_seg[:1],
                       pred_fn=tumor_detector.predict)
 
     if par.plot_layers["Any"]:
