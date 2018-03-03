@@ -12,7 +12,7 @@ import random as rand
 import time
 import os
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress/display warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
 
@@ -102,9 +102,9 @@ def read_images():
         if not os.path.isfile(img_dir + filename + '.jpg'):
             continue
 
-        #print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
-        #      end='\r',
-        #      flush=True)
+        print(f"Reading images... Now at {100*n_files/par.max_img:.2f}%",
+              end='\r',
+              flush=True)
 
         n_files += 1
 
@@ -164,9 +164,9 @@ def read_images():
     # Randomly bifurcate the input and segmentation images into  a train
     # and test set.
     for rand_idx in rand.sample(range(n_files), n_files):
-        #print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
-        #      end='\r',
-        #      flush=True)
+        print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
+              end='\r',
+              flush=True)
 
         # Store images in train or test set, depending on whether the
         # limit for the training images is reached.
@@ -214,7 +214,8 @@ def model_fn(features, labels, mode):
 
         for layer_idx in range(par.layer_depth):
             downward_conv_layers[block_idx].append(tf.layers.conv2d(
-                inputs=shape_layers[block_idx] if layer_idx == 0 else downward_dense_layers[block_idx][layer_idx-1],
+                inputs=downward_dense_layers[block_idx][layer_idx-1]
+                if layer_idx > 0 else shape_layers[block_idx],
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
@@ -233,14 +234,18 @@ def model_fn(features, labels, mode):
         # If previous layer is deepest, grab from downward layers.
         # Else, grab from previous upward
         upconv.append(tf.layers.conv2d_transpose(
-            inputs=downward_dense_layers[par.block_depth-1][par.layer_depth-1] if block_idx == 0 else upward_dense_layers[block_idx-1][par.layer_depth-1],
+            inputs=upward_dense_layers[block_idx-1][par.layer_depth-1]
+            if block_idx > 0
+            else downward_dense_layers[par.block_depth-1][par.layer_depth-1],
             filters=par.num_filters,
             kernel_size=par.filter_size,
             padding="same"))
 
         for layer_idx in range(par.layer_depth):
             upward_conv_layers[block_idx].append(tf.layers.conv2d(
-                inputs=upconv[block_idx] if layer_idx == 0 else upward_dense_layers[block_idx][layer_idx-1],
+                inputs=upward_dense_layers[block_idx][layer_idx-1]
+                if layer_idx > 0 else upconv[block_idx],
+                # this 'else' layer needs input from downward_dense_layers[par.block_depth-2-x][par.layer_depth-1]
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
