@@ -183,27 +183,42 @@ def read_images():
 
 
 def model_fn(features, labels, mode):
-    """Model function of the segmentation network."""
+    """Model function of the segmentation network.
+    The network is an encoder-decoder network with residual connections.
+    """
 
-    # Input layer
-    input_layer = tf.reshape(
-        features["x"], [-1, par.img_width, par.img_height, 1])
+    # Input layer: reshape the data to a variable batch of 2-D images.
+    input_layer = tf.reshape(tensor=features["x"],
+                             shape=[-1, par.img_width, par.img_height, 1],
+                             name="shape_layer_block_0")
 
-    upward_conv_layers = []
-    upward_dense_layers = []
-    downward_conv_layers = []
-    downward_dense_layers = []
-    shape_layers = []
-    upconv = []
+    # Initialize the main layers of the network.
+    # The first half of the network consists out of N dilated
+    # convolutions, which are alternated with blocks of M combinations
+    # of same-size convolution and dense layers.
+    # The second half of the network consists out of N upconvolutions
+    # and residual connections to corresponding downward layers, again
+    # alternated with M convolution-dense combinations.
+    upward_conv_layers = []  # 2-D: blocks and layer indices
+    upward_dense_layers = []  # 2-D: blocks and layer indices
+    downward_conv_layers = []  # 2-D: blocks and layer indices
+    downward_dense_layers = []  # 2-D: blocks and layer indices
+    shape_layers = []  # 1-D: blocks
+    upconv = []  # 1-D: blocks
 
+    # Build the "downward" blocks that dilate and convolute repeatedly.
     for block_idx in range(par.block_depth):
-        # Initialize number of conv layers
+        # Initialize this block's "layer" dimension to store tensors.
         downward_dense_layers.append([])
         downward_conv_layers.append([])
 
+        # If this is not the first downward block, read the previous
+        # dilation layer.
+        # Else, read the input layer.
         if block_idx is not 0:
             shape_layers.append(tf.layers.conv2d(
                 inputs=downward_dense_layers[block_idx-1][par.layer_depth-1],
+                name=f"shape_layer_block_{block_idx}",
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
@@ -212,60 +227,82 @@ def model_fn(features, labels, mode):
         else:
             shape_layers.append(input_layer)
 
+        # Construct the convolution-dense layers of this downward block.
         for layer_idx in range(par.layer_depth):
+            # Convolution layer. Read from previous layer if available.
+            # Else, read from previous block.
             downward_conv_layers[block_idx].append(tf.layers.conv2d(
                 inputs=downward_dense_layers[block_idx][layer_idx-1]
                 if layer_idx > 0 else shape_layers[block_idx],
+                name=f"downw_convo_block_{block_idx}_layer_{layer_idx}",
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
                 bias_initializer=tf.random_normal_initializer))
 
+            # Dense layer.
             downward_dense_layers[block_idx].append(tf.layers.dense(
                 inputs=downward_conv_layers[block_idx][layer_idx],
+                name=f"downw_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
                 activation=tf.nn.relu,
                 bias_initializer=tf.random_normal_initializer))
 
+    # Build the "upward" blocks that use upconvolution and
+    # convolution-dense blocks.
     for block_idx in range(par.block_depth-1):
+        # Initialize this block's "layer" dimension to store tensors.
         upward_dense_layers.append([])
         upward_conv_layers.append([])
 
-        # If previous layer is deepest, grab from downward layers.
-        # Else, grab from previous upward
+        # Upconvolute from the previous upward block. If this is the
+        # first upward block, read from the deepest downward block.
         upconv.append(tf.layers.conv2d_transpose(
             inputs=upward_dense_layers[block_idx-1][par.layer_depth-1]
             if block_idx > 0
             else downward_dense_layers[par.block_depth-1][par.layer_depth-1],
+            name=f"upconv_layer_block_{block_idx}",
             filters=par.num_filters,
             kernel_size=par.filter_size,
             padding="same"))
 
+        # Construct the convolution-dense layers of this upward block.
         for layer_idx in range(par.layer_depth):
+
+            # Convolution layer. Read from previous layer if available.
+            # Else, read from previous block and the residual connection
+            # from the corresponding downward block.
             upward_conv_layers[block_idx].append(tf.layers.conv2d(
                 inputs=upward_dense_layers[block_idx][layer_idx-1]
-                if layer_idx > 0 else upconv[block_idx],
+                if layer_idx > 0
+                else tf.concat([upconv[block_idx], shape_layers[par.block_depth-2-block_idx]], -1),
+                name=f"upwrd_convo_block_{block_idx}_layer_{layer_idx}",
                 # this 'else' layer needs input from downward_dense_layers[par.block_depth-2-x][par.layer_depth-1]
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
                 bias_initializer=tf.random_normal_initializer))
 
+            # Dense layer.
             upward_dense_layers[block_idx].append(tf.layers.dense(
                 inputs=upward_conv_layers[block_idx][layer_idx],
+                name=f"upwrd_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
                 activation=tf.nn.relu,
                 bias_initializer=tf.random_normal_initializer))
 
+    # Output dense layer
     output_dense = tf.layers.dense(
         inputs=upward_dense_layers[par.block_depth-2][par.layer_depth-1],
+        name="dense_output_layer",
         units=1,
         activation=tf.nn.relu,
         bias_initializer=tf.random_normal_initializer)
 
-    # Down block
-    output = tf.reshape(output_dense,
-                        [-1, par.img_width, par.img_height])
+    # Final output layer (batch of 2-D images)
+    output = tf.reshape(tensor=output_dense,
+                        shape=[-1, par.img_width, par.img_height],
+                        name="final_output_layer")
 
     # Save the output (for PREDICT mode)
     predictions = {"seg_out": output}
