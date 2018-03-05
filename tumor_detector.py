@@ -39,7 +39,12 @@ def predict_image(input_, output, pred_fn):
     plt.show()
 
 
-def plot_conv(filters):
+def plot_conv(filters, name, block, layer=None):
+    plot_dir_path = os.path.join(
+        par.plot_dir,
+        f"{name[1]}_{block}")
+    par.prepare_dir(plot_dir_path, empty=True)
+
     n_filters = filters.shape[3]
 
     grid_r, grid_c = par.get_grid_dim(n_filters)
@@ -51,7 +56,8 @@ def plot_conv(filters):
     fig, axes = plt.subplots(min([grid_r, grid_c]),
                              max([grid_r, grid_c]))
 
-    fig.suptitle("Convolutional filters")
+    fig.suptitle(f"{name[0]} filters for block {block}" + \
+                 ("" if layer is None else f" and layer {layer}"))
     fig.text(0, 0, "number of filters: " + str(n_filters) +
                    "\nfilter size: " + str(filters.shape[0]) +
                    "x" + str(filters.shape[1]))
@@ -70,7 +76,10 @@ def plot_conv(filters):
         ax.set_xticks([])
         ax.set_yticks([])
 
-    plt.show()
+    plt.savefig(os.path.join(
+        plot_dir_path,
+        f"{name[1]}" + ("" if layer is None else f"_{layer}")))
+    plt.close('all')
 
 
 def read_images():
@@ -249,7 +258,8 @@ def model_fn(features, labels, mode):
                 bias_initializer=tf.random_normal_initializer))
 
     # Build the "upward" blocks that use upconvolution and
-    # convolution-dense blocks.
+    # convolution-dense blocks. Deepest block is classified "downward",
+    # so there is one less "upward" block.
     for block_idx in range(par.block_depth-1):
         # Initialize this block's "layer" dimension to store tensors.
         upward_dense_layers.append([])
@@ -374,7 +384,9 @@ def main(config):
         num_epochs=par.num_epochs_eval,
         shuffle=True)
 
-    print(tumor_detector.evaluate(input_fn=eval_input_fn))
+    evaluation = tumor_detector.evaluate(input_fn=eval_input_fn)
+
+    print(evaluation)
 
     # Print time elapsed
     print(time.strftime(
@@ -387,14 +399,40 @@ def main(config):
                       pred_fn=tumor_detector.predict)
 
     if par.plot_layers["Any"]:
-        if par.plot_layers["Conv1"]:
-            plot_conv(tumor_detector.get_variable_value("Conv1_layer/kernel"))
-        if par.plot_layers["Dilated"]:
-            plot_conv(tumor_detector.get_variable_value("Dilation/kernel"))
-        if par.plot_layers["Conv2"]:
-            plot_conv(tumor_detector.get_variable_value("Conv2_layer/kernel"))
-        if par.plot_layers["Deconv"]:
-            plot_conv(tumor_detector.get_variable_value("Deconv/kernel"))
+        for block_idx in range(par.block_depth):
+            print(f"\nPlotting convolution filters for block {block_idx}/{par.block_depth-1}")
+            print("\tPlotting dilated convolution filters...")
+            if par.plot_layers["dilated_conv"] and block_idx > 0:
+                plot_conv(filters=tumor_detector.get_variable_value(
+                                  f"shape_layer_block_{block_idx}/kernel"),
+                          name=["Dilated Convolution", "dilconv"],
+                          block=block_idx)
+
+            print("\tPlotting upconvolution filters...")
+            if par.plot_layers["upconv"] and block_idx < par.block_depth-1:
+                plot_conv(filters=tumor_detector.get_variable_value(
+                                  f"upconv_layer_block_{block_idx}/kernel"),
+                          name=["Upconvolution", "upconv"],
+                          block=block_idx)
+
+            print("\tPlotting convolution filters...")
+            for layer_idx in range(par.layer_depth):
+                if par.plot_layers["downward"]:
+                    plot_conv(filters=tumor_detector.get_variable_value(
+                                      f"downw_convo_block_{block_idx}_" + \
+                                      f"layer_{layer_idx}/kernel"),
+                              name=["Downward Convolution", "downward"],
+                              block=block_idx,
+                              layer=layer_idx)
+                if par.plot_layers["upward"] and block_idx < par.block_depth-1:
+                    plot_conv(filters=tumor_detector.get_variable_value(
+                                      f"upwrd_convo_block_{block_idx}_" + \
+                                      f"layer_{layer_idx}/kernel"),
+                              name=["Upward Convolution", "upward"],
+                              block=block_idx,
+                              layer=layer_idx)
+
+    return evaluation['accuracy']
 
 
 if __name__ == "__main__":

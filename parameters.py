@@ -1,20 +1,22 @@
 import os
 import math
+import errno
 from shutil import rmtree
 
 overwrite_existing_model = True
-predict = True
+predict = False
 model_dir = './model_data/'
+plot_dir = './conv_plots/'
 img_width = 48
 img_height = 48
-train_percentage = 90
+train_percentage = 40
 max_img = 500
 batch_size = 1
-num_epochs_train = 100
-num_epochs_eval = 5
+num_epochs_train = 5
+num_epochs_eval = 1
 steps = 100
 learning_rate = 0.005
-num_hidden = 128
+num_hidden = 56
 layer_depth = 2
 block_depth = 3
 num_filters = 3
@@ -24,11 +26,11 @@ seg_threshold = 0.5
 optimizer = "Adadelta"
 
 plot_layers = {
-    "Any":      False,
-    "Conv1":    True,
-    "Dilated":  True,
-    "Conv2":    True,
-    "Deconv":   True
+    "Any":          False,
+    "downward":     True,
+    "upward":       True,
+    "dilated_conv": True,
+    "upconv":       True
 }
 
 
@@ -83,3 +85,30 @@ def prime_powers(n):
             factors.add(int(x))
             factors.add(int(n // x))
     return sorted(factors)
+
+
+def create_dir(path):
+    """
+    Creates a directory
+    :param path: string
+    :return: nothing
+    """
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST:
+            raise
+
+
+def prepare_dir(path, empty=False):
+    """
+    Creates a directory if it soes not exist
+    :param path: string, path to desired directory
+    :param empty: boolean, delete all directory content if it exists
+    :return: nothing
+    """
+    if not os.path.exists(path):
+        create_dir(path)
+
+    if empty:
+        empty_dir(path)
