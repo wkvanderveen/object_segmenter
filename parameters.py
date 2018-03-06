@@ -3,30 +3,31 @@ import math
 import errno
 from shutil import rmtree
 
-overwrite_existing_model = True
-predict = False
+predict = True
 model_dir = './model_data/'
+overwrite_existing_model = False
 plot_dir = './conv_plots/'
-img_width = 48
-img_height = 48
-train_percentage = 40
-max_img = 500
-batch_size = 1
-num_epochs_train = 5
-num_epochs_eval = 1
-steps = 100
-learning_rate = 0.005
+overwrite_existing_plot = True
+img_width = 100
+img_height = 100
+train_percentage = 90
+max_img = 2000
+batch_size = 10
+num_epochs_train = 50
+num_epochs_eval = 5
+steps = 2000
+learning_rate = 0.002
 num_hidden = 56
-layer_depth = 2
-block_depth = 3
-num_filters = 3
-filter_size = [5, 5]
+layer_depth = 3
+block_depth = 2 # minimally 2
+num_filters = 8
+filter_size = [8, 8]
 dropout_rate = 0.4
 seg_threshold = 0.5
 optimizer = "Adadelta"
 
 plot_layers = {
-    "Any":          False,
+    "Any":          True,
     "downward":     True,
     "upward":       True,
     "dilated_conv": True,
@@ -38,6 +39,8 @@ def rem_existing_model():
     """Delete map containing model metadata."""
     if overwrite_existing_model and os.path.exists(model_dir):
         rmtree(model_dir)
+    if overwrite_existing_plot and os.path.exists(plot_dir):
+        rmtree(plot_dir)
 
 
 def empty_dir(path):
