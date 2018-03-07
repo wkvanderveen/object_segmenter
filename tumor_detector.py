@@ -398,7 +398,7 @@ def main(config):
                       output=test_seg[:1],
                       pred_fn=tumor_detector.predict)
 
-    if par.plot_layers["Any"]:
+    if par.plot_filters:
         for block_idx in range(par.block_depth):
             print(f"\nPlotting convolution filters for block {block_idx}/{par.block_depth-1}")
             print("\tPlotting dilated convolution filters...")
@@ -426,7 +426,7 @@ def main(config):
                               layer=layer_idx)
                 if par.plot_layers["upward"] and block_idx < par.block_depth-1:
                     plot_conv(filters=tumor_detector.get_variable_value(
-                                      f"upwrd_convo_block_{block_idx}_" + \
+                                      f"upwrd_convo_block_{block_idx}_" +
                                       f"layer_{layer_idx}/kernel"),
                               name=["Upward Convolution", "upward"],
                               block=block_idx,

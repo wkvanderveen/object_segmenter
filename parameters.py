@@ -7,33 +7,33 @@ from shutil import rmtree
 
 predict = True
 model_dir = './model_data/'
-overwrite_existing_model = False
+overwrite_existing_model = True
 plot_dir = './conv_plots/'
+plot_filters = False
 overwrite_existing_plot = True
-img_width = 100
-img_height = 100
+img_width = 64
+img_height = 64
 train_percentage = 90
-max_img = 2000
+max_img = 400
 batch_size = 10
-num_epochs_train = 50
+num_epochs_train = 20
 num_epochs_eval = 5
-steps = 2000
-learning_rate = 0.002
+steps = 100
+learning_rate = 0.01
 num_hidden = 56
-layer_depth = 3
+layer_depth = 1
 block_depth = 2 # minimally 2
-num_filters = 8
-filter_size = [8, 8]
+num_filters = 4
+filter_size = [5, 5]
 dropout_rate = 0.4
 seg_threshold = 0.5
 optimizer = "Adadelta"
 
 plot_layers = {
-    "Any":          True,
     "downward":     True,
     "upward":       True,
     "dilated_conv": True,
-    "upconv": True
+    "upconv":       True
 }
 
 
