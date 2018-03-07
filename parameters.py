@@ -1,3 +1,5 @@
+"""Parameters and helper functions for residual segmentation network."""
+
 import os
 import math
 import errno
@@ -26,11 +28,11 @@ seg_threshold = 0.5
 optimizer = "Adadelta"
 
 plot_layers = {
-    "Any":          False,
-    "downward":     True,
-    "upward":       True,
+    "Any": False,
+    "downward": True,
+    "upward": True,
     "dilated_conv": True,
-    "upconv":       True
+    "upconv": True
 }
 
 
@@ -41,11 +43,7 @@ def rem_existing_model():
 
 
 def empty_dir(path):
-    """
-    Delete all files and folders in a directory
-    :param path: string, path to directory
-    :return: nothing
-    """
+    """Delete all files and folders in a directory."""
     for the_file in os.listdir(path):
         file_path = os.path.join(path, the_file)
         try:
@@ -58,11 +56,7 @@ def empty_dir(path):
 
 
 def get_grid_dim(x):
-    """
-    Transforms x into product of two integers
-    :param x: int
-    :return: two ints
-    """
+    """Transform x into product of two integers."""
     factors = prime_powers(x)
     if len(factors) % 2 == 0:
         i = int(len(factors) / 2)
@@ -73,12 +67,7 @@ def get_grid_dim(x):
 
 
 def prime_powers(n):
-    """
-    Compute the factors of a positive integer
-    Algorithm from https://rosettacode.org/wiki/Factors_of_an_integer#Python
-    :param n: int
-    :return: set
-    """
+    """Compute the factors of a positive integer."""
     factors = set()
     for x in range(1, int(math.sqrt(n)) + 1):
         if n % x == 0:
@@ -88,11 +77,7 @@ def prime_powers(n):
 
 
 def create_dir(path):
-    """
-    Creates a directory
-    :param path: string
-    :return: nothing
-    """
+    """Create a directory."""
     try:
         os.makedirs(path)
     except OSError as exc:
@@ -101,12 +86,7 @@ def create_dir(path):
 
 
 def prepare_dir(path, empty=False):
-    """
-    Creates a directory if it soes not exist
-    :param path: string, path to desired directory
-    :param empty: boolean, delete all directory content if it exists
-    :return: nothing
-    """
+    """Create a directory if it does not exist."""
     if not os.path.exists(path):
         create_dir(path)
 
