@@ -42,8 +42,8 @@ def predict_image(input_, output, pred_fn):
 def plot_conv(filters, name, block, layer=None):
     plot_dir_path = os.path.join(
         par.plot_dir,
-        f"{name[1]}_{block}")
-    par.prepare_dir(plot_dir_path, empty=True)
+        f"{name[1]}")
+    par.prepare_dir(plot_dir_path, empty=False)
 
     n_filters = filters.shape[3]
 
@@ -78,7 +78,7 @@ def plot_conv(filters, name, block, layer=None):
 
     plt.savefig(os.path.join(
         plot_dir_path,
-        f"{name[1]}" + ("" if layer is None else f"_{layer}")))
+        f"{name[1]}_b{block}" + ("" if layer is None else f"_l{layer}")))
     plt.close('all')
 
 
@@ -352,7 +352,7 @@ def model_fn(features, labels, mode):
 
 def main(config):
 
-    # Optionally overwrite existing metadata by removing its directory
+    # Optionally overwrite existing metadata/plots by removing its directory
     if par.overwrite_existing_model:
         par.rem_existing_model()
 
@@ -394,8 +394,8 @@ def main(config):
 
     # Optionally predict a random test image
     if par.predict:
-        predict_image(input_=train_img[:1],
-                      output=train_seg[:1],
+        predict_image(input_=test_img[:1],
+                      output=test_seg[:1],
                       pred_fn=tumor_detector.predict)
 
     if par.plot_layers["Any"]:
