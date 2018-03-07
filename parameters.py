@@ -1,34 +1,30 @@
-"""Parameters and helper functions for residual segmentation network."""
+"""Parameters and helper functions for residual segmentation network.
 
+   Copyright 2018 Werner van der Veen
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+"""
 import os
 import math
 import errno
 from shutil import rmtree
 
+# Information & diagnostics parameters
 predict = True
-model_dir = './model_data/'
-overwrite_existing_model = True
-plot_dir = './conv_plots/'
-plot_filters = False
+save_predictions = True  # 'True' in hyperparameter optimization
+plot_filters = True  # 'False' in hyperparameter optimization
+overwrite_existing_model = True  # 'True' in hyperparameter optimization
 overwrite_existing_plot = True
-img_width = 64
-img_height = 64
-train_percentage = 90
-max_img = 400
-batch_size = 10
-num_epochs_train = 20
-num_epochs_eval = 5
-steps = 100
-learning_rate = 0.01
-num_hidden = 56
-layer_depth = 1
-block_depth = 2 # minimally 2
-num_filters = 4
-filter_size = [5, 5]
-dropout_rate = 0.4
-seg_threshold = 0.5
-optimizer = "Adadelta"
-
 plot_layers = {
     "downward":     True,
     "upward":       True,
@@ -36,13 +32,51 @@ plot_layers = {
     "upconv":       True
 }
 
+# Network parameters
+layer_depth = 2
+block_depth = 2  # minimally 2
+num_hidden = 32
+num_filters = 3
+filter_size = [4, 4]
+dropout_rate = 0.4
+optimizer = "Adadelta"
 
-def rem_existing_model():
-    """Delete map containing model metadata."""
-    if overwrite_existing_model and os.path.exists(model_dir):
-        rmtree(model_dir)
-    if overwrite_existing_plot and os.path.exists(plot_dir):
-        rmtree(plot_dir)
+# Input parameters
+img_width = 64
+img_height = 64
+max_img = 400
+batch_size = 10
+train_percentage = 90
+
+# Other parameters
+model_dir = './model_data/'
+plot_dir = './conv_plots/'
+pred_dir = './predictions/'
+steps = 10
+num_epochs_train = 5
+num_epochs_eval = 5
+learning_rate = 0.01
+
+# Hyperparameter optimizer parameters
+hyperparameter1_search = {
+    "Name": "num_hidden",  # choose from 'network parameters'
+    "min_val": 50,
+    "max_val": 70,  # exclusive, must be larger than min_val
+    "step": 10
+}
+
+hyperparameter2_search = {
+    "Name": "num_filters",  # choose from 'network parameters'
+    "min_val": 6,
+    "max_val": 7,  # exclusive, must be larger than min_val
+    "step": 1
+}
+
+
+def rem_dir(directory):
+    """Delete a directory."""
+    if os.path.exists(directory):
+        rmtree(directory)
 
 
 def empty_dir(path):
@@ -95,3 +129,13 @@ def prepare_dir(path, empty=False):
 
     if empty:
         empty_dir(path)
+
+
+def print_big_title(text):
+    """Pretty print a large title that stands out in the terminal."""
+    size = 80
+    sym = '*'
+    print(f"\n\n{sym*size}")
+    for line in text:
+        print(f"***** {line}{' '*(size-12-len(line))} *****")
+    print(f"{sym*size}\n\n")

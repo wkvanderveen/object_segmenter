@@ -1,3 +1,21 @@
+"""Residual segmentation network.
+   This file should not be modified -- for changing variables, go to
+   parameters.py. See README.md file for instructions.
+
+   Copyright 2018 Werner van der Veen
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -16,7 +34,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress/display warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
 
-def predict_image(input_, output, pred_fn):
+def predict_image(input_, label, pred_fn):
     """Generate output from an input image and a prediction function."""
 
     pred_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -25,7 +43,7 @@ def predict_image(input_, output, pred_fn):
         shuffle=False)
 
     for single_predict in pred_fn(pred_input_fn):
-        imgs = [input_[0, :, :], single_predict["seg_out"], output[0, :, :]]
+        imgs = [input_[0, :, :], single_predict["output"], label[0, :, :]]
 
     # Initialize figure
     fig = plt.figure()
@@ -36,7 +54,13 @@ def predict_image(input_, output, pred_fn):
         sub.set_title(['Input', 'Prediction', 'Label'][img])
         plt.imshow(imgs[img], cmap='gray')
         plt.axis('off')
-    plt.show()
+
+    if par.save_predictions:
+        plt.savefig(os.path.join(
+            par.pred_dir, str(len([f for f in os.listdir(par.pred_dir)]))))
+        plt.close('all')
+    else:
+        plt.show()
 
 
 def plot_conv(filters, name, block, layer=None):
@@ -56,11 +80,10 @@ def plot_conv(filters, name, block, layer=None):
     fig, axes = plt.subplots(min([grid_r, grid_c]),
                              max([grid_r, grid_c]))
 
-    fig.suptitle(f"{name[0]} filters for block {block}" + \
+    fig.suptitle(f"{name[0]} filters for block {block}" +
                  ("" if layer is None else f" and layer {layer}"))
-    fig.text(0, 0, "number of filters: " + str(n_filters) +
-                   "\nfilter size: " + str(filters.shape[0]) +
-                   "x" + str(filters.shape[1]))
+    fig.text(0, 0, (f"number of filters: {n_filters}\nfilter size: ",
+                    f"{filters.shape[0]}x{filters.shape[1]}"))
 
     # Iterate over subplots and plot image of filter or convolution
     for l, ax in enumerate(axes.flat):
@@ -173,7 +196,8 @@ def read_images():
     # Randomly bifurcate the input and segmentation images into  a train
     # and test set.
     for rand_idx in rand.sample(range(n_files), n_files):
-        print(f"Sampling images... Now at {100*(c_train+c_test)/n_files:.2f}%",
+        print((f"Sampling images... Now at " +
+               f"{100*(c_train+c_test+1)/n_files:.2f}%"),
               end='\r',
               flush=True)
 
@@ -187,6 +211,8 @@ def read_images():
             test_img[c_test] = img[rand_idx] / 256
             test_seg[c_test] = seg[rand_idx] / 256
             c_test += 1
+
+    print("\nSampling images completed!\n")
 
     return train_img, train_seg, test_img, test_seg
 
@@ -285,9 +311,11 @@ def model_fn(features, labels, mode):
             upward_conv_layers[block_idx].append(tf.layers.conv2d(
                 inputs=upward_dense_layers[block_idx][layer_idx-1]
                 if layer_idx > 0
-                else tf.concat([upconv[block_idx], shape_layers[par.block_depth-2-block_idx]], -1),
+                else tf.concat(
+                    [upconv[block_idx],
+                     shape_layers[par.block_depth-2-block_idx]],
+                    -1),
                 name=f"upwrd_convo_block_{block_idx}_layer_{layer_idx}",
-                # this 'else' layer needs input from downward_dense_layers[par.block_depth-2-x][par.layer_depth-1]
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
@@ -315,11 +343,11 @@ def model_fn(features, labels, mode):
                         name="final_output_layer")
 
     # Save the output (for PREDICT mode)
-    predictions = {"seg_out": output}
     if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+        return tf.estimator.EstimatorSpec(mode=mode,
+                                          predictions={"output": output})
 
-    # Calculate loss (for both TRAIN and EVAL modes)
+    # Calculate loss
     loss = tf.losses.mean_squared_error(labels=labels,
                                         predictions=output)
 
@@ -334,16 +362,23 @@ def model_fn(features, labels, mode):
             learning_rate=par.learning_rate)
 
         train_op = optimizer.minimize(loss=loss,
-                                      global_step=tf.train.get_global_step())
+                                      global_step=tf.train.get_global_step(),
+                                      name="optimizer")
+
+        # Set up logging
+        logging_hook = tf.train.LoggingTensorHook(
+            tensors={"step": "optimizer"}, every_n_iter=1)
 
         return tf.estimator.EstimatorSpec(mode=mode,
                                           loss=loss,
-                                          train_op=train_op)
+                                          train_op=train_op,
+                                          training_hooks=[logging_hook])
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(labels=labels,
-                                        predictions=predictions["seg_out"])}
+                                        predictions=output)
+    }
 
     return tf.estimator.EstimatorSpec(mode=mode,
                                       loss=loss,
@@ -351,10 +386,35 @@ def model_fn(features, labels, mode):
 
 
 def main(config):
+    # If config contains additional parameters, override 'par' module.
+    if len(config) > 1:
+        tf.logging.set_verbosity(tf.logging.WARN)
+        par.save_predictions = True
+        par.plot_filters = False
+        for [par_name, par_value] in config[1:]:
+            if par_name is "num_hidden":
+                par.num_hidden = par_value
+            if par_name is "num_filters":
+                par.num_filters = par_value
+            if par_name is "layer_depth":
+                par.layer_depth = par_value
+            if par_name is "block_depth":
+                par.block_depth = par_value
+            if par_name is "filter_size":
+                par.filter_size = [par_value, par_value]
+            if par_name is "dropout_rate":
+                par.dropout_rate = par_value
+            if par_name is "optimizer":
+                par.optimizer = par_value
 
-    # Optionally overwrite existing metadata/plots by removing its directory
-    if par.overwrite_existing_model:
-        par.rem_existing_model()
+    else:
+        # Optionally overwrite existing model by emptying its directory
+        if par.overwrite_existing_model:
+            par.prepare_dir(par.model_dir, empty=True)
+        if par.save_predictions and par.predict:
+            par.prepare_dir(par.pred_dir, empty=True)
+        if par.overwrite_existing_plot:
+            par.prepare_dir(par.plot_dir, empty=True)
 
     # Start timer
     start_time = time.time()
@@ -363,10 +423,13 @@ def main(config):
     train_img, train_seg, test_img, test_seg = read_images()
 
     # Create the Estimator
+    print("Creating Estimator...")
     tumor_detector = tf.estimator.Estimator(model_fn=model_fn,
                                             model_dir=par.model_dir)
+    print("Creating Estimator completed!\n")
 
     # Train the model
+    print("Training model...")
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_img},
         y=train_seg,
@@ -376,8 +439,10 @@ def main(config):
 
     tumor_detector.train(input_fn=train_input_fn,
                          steps=par.steps)
+    print("Training model completed!\n")
 
     # Evaluate the model and print results
+    print("Evaluating model...")
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": test_img},
         y=test_seg,
@@ -385,8 +450,7 @@ def main(config):
         shuffle=True)
 
     evaluation = tumor_detector.evaluate(input_fn=eval_input_fn)
-
-    print(evaluation)
+    print("Evaluating model completed!\n")
 
     # Print time elapsed
     print(time.strftime(
@@ -395,12 +459,13 @@ def main(config):
     # Optionally predict a random test image
     if par.predict:
         predict_image(input_=test_img[:1],
-                      output=test_seg[:1],
+                      label=test_seg[:1],
                       pred_fn=tumor_detector.predict)
 
     if par.plot_filters:
         for block_idx in range(par.block_depth):
-            print(f"\nPlotting convolution filters for block {block_idx}/{par.block_depth-1}")
+            print(f"\nPlotting convolution filters for block ",
+                  f"{block_idx}/{par.block_depth-1}")
             print("\tPlotting dilated convolution filters...")
             if par.plot_layers["dilated_conv"] and block_idx > 0:
                 plot_conv(filters=tumor_detector.get_variable_value(
@@ -419,7 +484,7 @@ def main(config):
             for layer_idx in range(par.layer_depth):
                 if par.plot_layers["downward"]:
                     plot_conv(filters=tumor_detector.get_variable_value(
-                                      f"downw_convo_block_{block_idx}_" + \
+                                      f"downw_convo_block_{block_idx}_" +
                                       f"layer_{layer_idx}/kernel"),
                               name=["Downward Convolution", "downward"],
                               block=block_idx,
