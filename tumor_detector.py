@@ -12,9 +12,9 @@
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   permissions and limitations under the License.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -32,7 +32,6 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress/display warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
-
 
 def predict_image(input_, label, pred_fn):
     """Generate output from an input image and a prediction function."""
@@ -64,6 +63,7 @@ def predict_image(input_, label, pred_fn):
 
 
 def plot_conv(filters, name, block, layer=None):
+    """Plot the filters of the convolutional layers and save to file."""
     plot_dir_path = os.path.join(
         par.plot_dir,
         f"{name[1]}")
@@ -86,18 +86,18 @@ def plot_conv(filters, name, block, layer=None):
                     f"{filters.shape[0]}x{filters.shape[1]}"))
 
     # Iterate over subplots and plot image of filter or convolution
-    for l, ax in enumerate(axes.flat):
+    for filt, axis in enumerate(axes.flat):
 
-        img = filters[:, :, 0, l]
-        ax.imshow(img,
-                  vmin=v_min,
-                  vmax=v_max,
-                  interpolation='nearest',
-                  cmap='seismic')
+        img = filters[:, :, 0, filt]
+        axis.imshow(img,
+                    vmin=v_min,
+                    vmax=v_max,
+                    interpolation='nearest',
+                    cmap='seismic')
 
         # Remove axis labels
-        ax.set_xticks([])
-        ax.set_yticks([])
+        axis.set_xticks([])
+        axis.set_yticks([])
 
     plt.savefig(os.path.join(
         plot_dir_path,
@@ -367,7 +367,7 @@ def model_fn(features, labels, mode):
 
         # Set up logging
         logging_hook = tf.train.LoggingTensorHook(
-            tensors={"step": "optimizer"}, every_n_iter=1)
+            tensors={"step": "optimizer"}, every_n_iter=par.step_log_interval)
 
         return tf.estimator.EstimatorSpec(mode=mode,
                                           loss=loss,
@@ -386,7 +386,9 @@ def model_fn(features, labels, mode):
 
 
 def main(config):
-    # If config contains additional parameters, override 'par' module.
+    # If config contains additional parameters, we are doing grid search
+    # for hyperparameters. In this case, overwrite relevant parameters
+    # from 'par' module, and reduce verbosity.
     if len(config) > 1:
         tf.logging.set_verbosity(tf.logging.WARN)
         par.save_predictions = True
@@ -408,7 +410,8 @@ def main(config):
                 par.optimizer = par_value
 
     else:
-        # Optionally overwrite existing model by emptying its directory
+        # Standard case. Optionally overwrite existing model by emptying
+        # its directory
         if par.overwrite_existing_model:
             par.prepare_dir(par.model_dir, empty=True)
         if par.save_predictions and par.predict:
