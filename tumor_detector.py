@@ -108,7 +108,7 @@ def model_fn(features, labels, mode):
                 inputs=downward_conv_layers[block_idx][layer_idx],
                 name=f"downw_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
-                activation=tf.nn.relu,
+                activation=tf.sigmoid,
                 bias_initializer=tf.random_normal_initializer))
 
     # Build the "upward" blocks that use upconvolution and
@@ -154,7 +154,7 @@ def model_fn(features, labels, mode):
                 inputs=upward_conv_layers[block_idx][layer_idx],
                 name=f"upwrd_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
-                activation=tf.nn.relu,
+                activation=tf.sigmoid,
                 bias_initializer=tf.random_normal_initializer))
 
     # Output dense layer

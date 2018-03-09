@@ -17,7 +17,7 @@
 
 # Information & diagnostics parameters
 predict = True
-save_predictions = False  # 'True' in hyperparameter optimization
+save_predictions = True  # 'True' in hyperparameter optimization
 overwrite_existing_model = True  # 'True' in hyperparameter optimization
 plot_filters = False  # 'False' in hyperparameter optimization
 overwrite_existing_plot = True
@@ -34,28 +34,26 @@ img_dir = './VOC2012-objects/JPEGImages/'
 seg_dir = './VOC2012-objects/SegmentationObject/'
 
 # Network parameters
-layer_depth = 1
+layer_depth = 2
 block_depth = 3  # minimally 2
-num_hidden = 64
-num_filters = 5
-filter_size = [5, 5]
+num_hidden = 128
+num_filters = 10
+filter_size = [10, 10]
 dropout_rate = 0.4
-# GradDescent, PGradDescent, Momentum, Adam, Adadelta, Adagrad,
-# AdagradDA, PAdagrad, Ftrl, RMSProp
-optimizer = "Ftrl"
+optimizer = "Adam"
 
 # Input parameters
-img_width = 80
-img_height = 80
-max_img = 100
+img_width = 128
+img_height = 128
+max_img = 1000
 batch_size = 5
 train_percentage = 90
 
 # Other parameters
-steps = 20
-step_log_interval = 2
-num_epochs_train = 50
-num_epochs_eval = 10
+steps = 10000
+step_log_interval = 1000
+num_epochs_train = 80
+num_epochs_eval = 50
 learning_rate = 0.001
 
 # Hyperparameter optimizer parameters
@@ -72,3 +70,19 @@ hyperparameter2_search = {
     "max_val": 7,
     "step": 5
 }
+
+
+
+""" TODO:
+
+Include dropout
+
+Include batch normalization
+
+Include Gradient Noise
+
+Include Early Stopping
+
+
+
+"""
