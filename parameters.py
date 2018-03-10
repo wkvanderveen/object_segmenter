@@ -17,7 +17,7 @@
 
 # Information & diagnostics parameters
 predict = True
-save_predictions = True  # 'True' in hyperparameter optimization
+save_predictions = False  # 'True' in hyperparameter optimization
 overwrite_existing_model = True  # 'True' in hyperparameter optimization
 plot_filters = False  # 'False' in hyperparameter optimization
 overwrite_existing_plot = True
@@ -36,24 +36,24 @@ seg_dir = './VOC2012-objects/SegmentationObject/'
 # Network parameters
 layer_depth = 2
 block_depth = 3  # minimally 2
-num_hidden = 128
-num_filters = 10
-filter_size = [10, 10]
+num_hidden = 56
+num_filters = 4
+filter_size = [4, 4]
 dropout_rate = 0.4
 optimizer = "Adam"
 
 # Input parameters
-img_width = 128
-img_height = 128
-max_img = 1000
-batch_size = 5
+img_width = 32
+img_height = 32
+max_img = 200
+batch_size = 2
 train_percentage = 90
 
 # Other parameters
-steps = 10000
+steps = 100
 step_log_interval = 1000
-num_epochs_train = 80
-num_epochs_eval = 50
+num_epochs_train = 50
+num_epochs_eval = 10
 learning_rate = 0.001
 
 # Hyperparameter optimizer parameters

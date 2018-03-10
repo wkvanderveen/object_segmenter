@@ -62,18 +62,21 @@ def model_fn(features, labels, mode):
     # The second half of the network consists out of N upconvolutions
     # and residual connections to corresponding downward layers, again
     # alternated with M convolution-dense combinations.
-    upward_conv_layers = []  # 2-D: blocks and layer indices
-    upward_dense_layers = []  # 2-D: blocks and layer indices
-    downward_conv_layers = []  # 2-D: blocks and layer indices
-    downward_dense_layers = []  # 2-D: blocks and layer indices
-    shape_layers = []  # 1-D: blocks
-    upconv = []  # 1-D: blocks
+    shape_layers = []  # 1-D: block indices
+    downward_conv_layers = []  # 2-D: block and layer indices
+    downward_dense_layers = []  # 2-D: block and layer indices
+    down_batch_norm = []  # 2-D: block and layer indices
+    upconv = []  # 1-D: block indices
+    upward_conv_layers = []  # 2-D: block and layer indices
+    upward_dense_layers = []  # 2-D: block and layer indices
+    up_batch_norm = []  # 2-D: block and layer indices
 
     # Build the "downward" blocks that dilate and convolute repeatedly.
     for block_idx in range(par.block_depth):
         # Initialize this block's "layer" dimension to store tensors.
-        downward_dense_layers.append([])
         downward_conv_layers.append([])
+        down_batch_norm.append([])
+        downward_dense_layers.append([])
 
         # If this is not the first downward block, read the previous
         # dilation layer.
@@ -103,9 +106,14 @@ def model_fn(features, labels, mode):
                 padding="same",
                 bias_initializer=tf.random_normal_initializer))
 
+            # Batch Normalization.
+            down_batch_norm[block_idx].append(tf.layers.batch_normalization(
+                inputs=downward_conv_layers[block_idx][layer_idx],
+                name=f"downw_batch_norm_{block_idx}_{layer_idx}"))
+
             # Dense layer.
             downward_dense_layers[block_idx].append(tf.layers.dense(
-                inputs=downward_conv_layers[block_idx][layer_idx],
+                inputs=down_batch_norm[block_idx][layer_idx],
                 name=f"downw_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
                 activation=tf.sigmoid,
@@ -116,8 +124,9 @@ def model_fn(features, labels, mode):
     # so there is one less "upward" block.
     for block_idx in range(par.block_depth-1):
         # Initialize this block's "layer" dimension to store tensors.
-        upward_dense_layers.append([])
         upward_conv_layers.append([])
+        up_batch_norm.append([])
+        upward_dense_layers.append([])
 
         # Upconvolute from the previous upward block. If this is the
         # first upward block, read from the deepest downward block.
@@ -149,9 +158,14 @@ def model_fn(features, labels, mode):
                 padding="same",
                 bias_initializer=tf.random_normal_initializer))
 
+            # Batch Normalization.
+            up_batch_norm[block_idx].append(tf.layers.batch_normalization(
+                inputs=upward_conv_layers[block_idx][layer_idx],
+                name=f"up_batch_norm_{block_idx}_{layer_idx}"))
+
             # Dense layer.
             upward_dense_layers[block_idx].append(tf.layers.dense(
-                inputs=upward_conv_layers[block_idx][layer_idx],
+                inputs=up_batch_norm[block_idx][layer_idx],
                 name=f"upwrd_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
                 activation=tf.sigmoid,
