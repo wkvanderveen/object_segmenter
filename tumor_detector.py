@@ -64,12 +64,14 @@ def model_fn(features, labels, mode):
     # alternated with M convolution-dense combinations.
     shape_layers = []  # 1-D: block indices
     downward_conv_layers = []  # 2-D: block and layer indices
-    downward_dense_layers = []  # 2-D: block and layer indices
     down_batch_norm = []  # 2-D: block and layer indices
+    downward_dense_layers = []  # 2-D: block and layer indices
+    down_dropout = []  # 2-D: block and layer indices
     upconv = []  # 1-D: block indices
     upward_conv_layers = []  # 2-D: block and layer indices
-    upward_dense_layers = []  # 2-D: block and layer indices
     up_batch_norm = []  # 2-D: block and layer indices
+    upward_dense_layers = []  # 2-D: block and layer indices
+    up_dropout = []  # 2-D: block and layer indices
 
     # Build the "downward" blocks that dilate and convolute repeatedly.
     for block_idx in range(par.block_depth):
@@ -77,13 +79,14 @@ def model_fn(features, labels, mode):
         downward_conv_layers.append([])
         down_batch_norm.append([])
         downward_dense_layers.append([])
+        down_dropout.append([])
 
         # If this is not the first downward block, read the previous
         # dilation layer.
         # Else, read the input layer.
         if block_idx is not 0:
             shape_layers.append(tf.layers.conv2d(
-                inputs=downward_dense_layers[block_idx-1][par.layer_depth-1],
+                inputs=down_dropout[block_idx-1][par.layer_depth-1],
                 name=f"shape_layer_block_{block_idx}",
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
@@ -98,7 +101,7 @@ def model_fn(features, labels, mode):
             # Convolution layer. Read from previous layer if available.
             # Else, read from previous block.
             downward_conv_layers[block_idx].append(tf.layers.conv2d(
-                inputs=downward_dense_layers[block_idx][layer_idx-1]
+                inputs=down_dropout[block_idx][layer_idx-1]
                 if layer_idx > 0 else shape_layers[block_idx],
                 name=f"downw_convo_block_{block_idx}_layer_{layer_idx}",
                 filters=par.num_filters,
@@ -119,6 +122,11 @@ def model_fn(features, labels, mode):
                 activation=tf.sigmoid,
                 bias_initializer=tf.random_normal_initializer))
 
+            # Dropout.
+            down_dropout[block_idx].append(tf.layers.dropout(
+                inputs=downward_dense_layers[block_idx][layer_idx],
+                name=f"downw_dropout_block_{block_idx}_layer_{layer_idx}"))
+
     # Build the "upward" blocks that use upconvolution and
     # convolution-dense blocks. Deepest block is classified "downward",
     # so there is one less "upward" block.
@@ -127,13 +135,14 @@ def model_fn(features, labels, mode):
         upward_conv_layers.append([])
         up_batch_norm.append([])
         upward_dense_layers.append([])
+        up_dropout.append([])
 
         # Upconvolute from the previous upward block. If this is the
         # first upward block, read from the deepest downward block.
         upconv.append(tf.layers.conv2d_transpose(
-            inputs=upward_dense_layers[block_idx-1][par.layer_depth-1]
+            inputs=up_dropout[block_idx-1][par.layer_depth-1]
             if block_idx > 0
-            else downward_dense_layers[par.block_depth-1][par.layer_depth-1],
+            else down_dropout[par.block_depth-1][par.layer_depth-1],
             name=f"upconv_layer_block_{block_idx}",
             filters=par.num_filters,
             kernel_size=par.filter_size,
@@ -146,7 +155,7 @@ def model_fn(features, labels, mode):
             # Else, read from previous block and the residual connection
             # from the corresponding downward block.
             upward_conv_layers[block_idx].append(tf.layers.conv2d(
-                inputs=upward_dense_layers[block_idx][layer_idx-1]
+                inputs=up_dropout[block_idx][layer_idx-1]
                 if layer_idx > 0
                 else tf.concat(
                     [upconv[block_idx],
@@ -171,9 +180,14 @@ def model_fn(features, labels, mode):
                 activation=tf.sigmoid,
                 bias_initializer=tf.random_normal_initializer))
 
+            # Dropout.
+            up_dropout[block_idx].append(tf.layers.dropout(
+                inputs=upward_dense_layers[block_idx][layer_idx],
+                name=f"up_dropout_block_{block_idx}_layer_{layer_idx}"))
+
     # Output dense layer
     output_dense = tf.layers.dense(
-        inputs=upward_dense_layers[par.block_depth-2][par.layer_depth-1],
+        inputs=up_dropout[par.block_depth-2][par.layer_depth-1],
         name="dense_output_layer",
         units=1,
         activation=tf.sigmoid,
