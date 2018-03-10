@@ -38,23 +38,23 @@ layer_depth = 2
 block_depth = 3  # minimally 2
 num_hidden = 56
 num_filters = 4
-filter_size = [4, 4]
+filter_size = [5, 5]
 dropout_rate = 0.4
 optimizer = "Adam"
 
 # Input parameters
-img_width = 32
-img_height = 32
+img_width = 50
+img_height = 50
 max_img = 200
-batch_size = 2
+batch_size = 5
 train_percentage = 90
 
 # Other parameters
-steps = 100
+steps = 500
 step_log_interval = 1000
 num_epochs_train = 50
 num_epochs_eval = 10
-learning_rate = 0.001
+learning_rate = 0.05
 
 # Hyperparameter optimizer parameters
 hyperparameter1_search = {
@@ -71,18 +71,10 @@ hyperparameter2_search = {
     "step": 5
 }
 
-
-
 """ TODO:
-
-Include dropout
-
-Include batch normalization
 
 Include Gradient Noise
 
 Include Early Stopping
-
-
 
 """

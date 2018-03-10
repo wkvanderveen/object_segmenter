@@ -10,17 +10,26 @@ This neural network has the following structure:
 1) Input layer (a batch of 2-D images);
 
 2) A variable number of "downward blocks", each consisting out of:
-	a) alternating same-size convolution layers and ReLU dense layers, repeated for a variable number of times;
+	a) repeated for a variable number of times:
+          i) Same-size convolution layer
+         ii) Batch normalization layer
+        iii) Dense ReLU layer
+         iv) Dropout layer
 	b) a dilated convolution layer, to downscales the image size by a quarter of its size. The last downward block has no dilated convolution layer.
 
 3) A variable number of "upward blocks", each consisting out of:
 	a) an upconvolution layer, which upscales the image by to 4 times its size.
 	b) alternating same-size convolution layers and ReLU dense layers, repeated for a variable number of times. The first of these convolution layers receives input from the previous upconvolutional layer, but also from the dilated convolution layer (or input layer) that scaled to the same image size.
+    b) repeated for a variable number of times:
+          i) Same-size convolution layer, receiving input from previous upconvolutional layer but also from the dilated convolution layer (or input layer) that scaled to the same image size.
+         ii) Batch normalization layer
+        iii) Dense ReLU layer
+         iv) Dropout layer
 
-4) An output layer which is also a batch of 2-D images.
+4) An output layer using a sigmoidal activation function.
 
 
-At the moment, I use the Adadelta optimizer and calculate the loss using a sums-of-squares method. These may (and probably will) change later on.
+At the moment, I use the Adam optimizer and calculate the loss using a sums-of-squares method. These may change later on.
 
 ## Instructions
 

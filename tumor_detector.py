@@ -125,6 +125,7 @@ def model_fn(features, labels, mode):
             # Dropout.
             down_dropout[block_idx].append(tf.layers.dropout(
                 inputs=downward_dense_layers[block_idx][layer_idx],
+                rate=par.dropout_rate,
                 name=f"downw_dropout_block_{block_idx}_layer_{layer_idx}"))
 
     # Build the "upward" blocks that use upconvolution and
@@ -183,6 +184,7 @@ def model_fn(features, labels, mode):
             # Dropout.
             up_dropout[block_idx].append(tf.layers.dropout(
                 inputs=upward_dense_layers[block_idx][layer_idx],
+                rate=par.dropout_rate,
                 name=f"up_dropout_block_{block_idx}_layer_{layer_idx}"))
 
     # Output dense layer
