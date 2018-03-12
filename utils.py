@@ -169,6 +169,8 @@ def predict_image(input_, label, pred_fn):
         plt.close('all')
     else:
         plt.show()
+        print(imgs[2])
+        print(imgs[1])
 
 
 def plot_conv(filters, name, block, layer=None):

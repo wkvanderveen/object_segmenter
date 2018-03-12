@@ -32,10 +32,8 @@ tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
 
 def get_data():
-    """Read the input-output pairs from folder and return numpy arrays
-    of the train and test sets.
-
-    TODO: Split get_data() into read_images() and sample_images().
+    """Read data from file and return as train and test sets containing
+    sampled input and label images.
     """
 
     img, seg = utils.read_images()
