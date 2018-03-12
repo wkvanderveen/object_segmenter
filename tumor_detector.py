@@ -117,7 +117,7 @@ def model_fn(features, labels, mode):
                 inputs=down_batch_norm[block_idx][layer_idx],
                 name=f"downw_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
-                activation=tf.sigmoid,
+                activation=tf.nn.leaky_relu,
                 bias_initializer=tf.random_normal_initializer))
 
             # Dropout.
@@ -176,7 +176,7 @@ def model_fn(features, labels, mode):
                 inputs=up_batch_norm[block_idx][layer_idx],
                 name=f"upwrd_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
-                activation=tf.sigmoid,
+                activation=tf.nn.leaky_relu,
                 bias_initializer=tf.random_normal_initializer))
 
             # Dropout.
@@ -208,21 +208,8 @@ def model_fn(features, labels, mode):
                                         predictions=output)
 
     # Configure the training op (for TRAIN mode)
-    optimizers = {
-        "GradDescent":      tf.train.GradientDescentOptimizer,
-        "PGradDescent":     tf.train.ProximalGradientDescentOptimizer,
-        "Momentum":         tf.train.MomentumOptimizer,
-        "Adam":             tf.train.AdamOptimizer,
-        "Adadelta":         tf.train.AdadeltaOptimizer,
-        "Adagrad":          tf.train.AdagradOptimizer,
-        "AdagradDA":        tf.train.AdagradDAOptimizer,
-        "PAdagrad":         tf.train.ProximalAdagradOptimizer,
-        "Ftrl":             tf.train.FtrlOptimizer,
-        "RMSProp":          tf.train.RMSPropOptimizer
-    }
-
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = optimizers[par.optimizer](
+        optimizer = tf.train.AdamOptimizer(
             learning_rate=par.learning_rate)
 
         train_op = optimizer.minimize(loss=loss,
@@ -369,14 +356,3 @@ def main(config):
 
 if __name__ == "__main__":
     tf.app.run()
-
-"""
-TODO:
-
-1) Sigmoid in last dense
-
-2) Dropout
-
-3) Simplify, standardize, refactor
-
-"""

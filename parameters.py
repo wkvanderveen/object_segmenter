@@ -34,27 +34,26 @@ img_dir = './VOC2012-objects/JPEGImages/'
 seg_dir = './VOC2012-objects/SegmentationObject/'
 
 # Network parameters
-layer_depth = 2
+layer_depth = 1
 block_depth = 3  # minimally 2
-num_hidden = 128
-num_filters = 6
-filter_size = [8, 8]
+num_hidden = 64
+num_filters = 5
+filter_size = [6, 6]
 dropout_rate = 0.4
-optimizer = "Adam"
 
 # Input parameters
 img_width = 64
 img_height = 64
-max_img = 100
-batch_size = 1
+max_img = 2000
+batch_size = 5
 train_percentage = 85
 
 # Other parameters
-steps = 100
-step_log_interval = 5
-num_epochs_train = 20
-num_epochs_eval = 5
-learning_rate = 0.005
+steps = 10
+step_log_interval = 1000
+num_epochs_train = 5
+num_epochs_eval = 10
+learning_rate = 0.0002
 
 # Hyperparameter optimizer parameters
 hyperparameter1_search = {
@@ -72,6 +71,8 @@ hyperparameter2_search = {
 }
 
 """ TODO:
+
+Check output normalization
 
 Include Gradient Noise
 

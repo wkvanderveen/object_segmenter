@@ -28,6 +28,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import math
 import errno
+from sklearn.preprocessing import normalize
 from shutil import rmtree
 
 
@@ -36,8 +37,8 @@ def read_images():
     # Set directories containing the images and segmentation objects.
     # Initialize the lists where the input and segmentation images will
     # be stored.
-    img = []
-    seg = []
+    img_list = []
+    seg_list = []
 
     n_files = 0
 
@@ -60,36 +61,39 @@ def read_images():
 
         n_files += 1
 
-        # Read the images from their files
-        current_img = cv2.imread(par.img_dir + filename + '.jpg')
+        # Read the images from their files.
+        img = cv2.imread(par.img_dir + filename + '.jpg')
 
-        current_seg = cv2.imread(par.seg_dir + seg_file)
+        seg = cv2.imread(par.seg_dir + seg_file)
 
         # Resize the images to the standard size (from the parameters)
-        resized_img = cv2.resize(
-            src=current_img,
+        img = cv2.resize(
+            src=img,
             dsize=(par.img_width, par.img_height),
             interpolation=cv2.INTER_NEAREST)
-        resized_seg = cv2.resize(
-            src=current_seg,
+        seg = cv2.resize(
+            src=seg,
             dsize=(par.img_width, par.img_height),
             interpolation=cv2.INTER_NEAREST)
 
         # Convert BGR to greyscale color format
-        recolored_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2GRAY)
-        recolored_img = recolored_img.astype(float)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = img.astype(float)
 
         # Convert segmentation image to binary color format.
-        recolored_seg = np.ceil(np.amax(resized_seg, axis=2))
-        recolored_seg = recolored_seg.astype(int)
+        seg = np.ceil(np.amax(seg, axis=2))
+
+        # Normalize the image values.
+        img = (img - np.min(img)) / (np.ptp(img)/2) - 1  # between [-1,1]
+        seg = (seg - np.min(seg)) / (np.ptp(seg))  # between [0,1]
 
         # Append resized images to their respective lists.
-        img.append(recolored_img)
-        seg.append(recolored_seg)
+        img_list.append(img)
+        seg_list.append(seg)
 
     print("\nReading images completed!\n")
 
-    return img, seg
+    return img_list, seg_list
 
 
 def sample_images(img, seg):
@@ -169,8 +173,6 @@ def predict_image(input_, label, pred_fn):
         plt.close('all')
     else:
         plt.show()
-        print(imgs[2])
-        print(imgs[1])
 
 
 def plot_conv(filters, name, block, layer=None):
