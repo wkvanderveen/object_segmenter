@@ -35,39 +35,39 @@ seg_dir = './VOC2012-objects/SegmentationObject/'
 
 # Network parameters
 layer_depth = 1
-block_depth = 3  # minimally 2
-num_hidden = 64
+block_depth = 5  # minimally 2
+num_hidden = 512
 num_filters = 5
-filter_size = [6, 6]
+filter_size = [8, 8]
 dropout_rate = 0.4
 
 # Input parameters
 img_width = 64
 img_height = 64
 max_img = 2000
-batch_size = 5
-train_percentage = 85
+batch_size = 1
+train_percentage = 95
 
 # Other parameters
-steps = 10
-step_log_interval = 1000
-num_epochs_train = 5
-num_epochs_eval = 10
-learning_rate = 0.0002
+steps = 500
+step_log_interval = 50
+num_epochs_train = 30
+num_epochs_eval = 1
+learning_rate = 0.001
 
 # Hyperparameter optimizer parameters
 hyperparameter1_search = {
-    "Name": "num_hidden",  # choose from 'network parameters'
-    "min_val": 20,
-    "max_val": 140,
-    "step": 40
+    "Name": "layer_depth",  # choose from 'network parameters'
+    "min_val": 1,
+    "max_val": 4,
+    "step": 1
 }
 
 hyperparameter2_search = {
-    "Name": "num_filters",  # choose from 'network parameters'
+    "Name": "block_depth",  # choose from 'network parameters'
     "min_val": 2,
-    "max_val": 8,
-    "step": 2
+    "max_val": 4,
+    "step": 1
 }
 
 """ TODO:

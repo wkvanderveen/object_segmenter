@@ -160,6 +160,10 @@ def predict_image(input_, label, pred_fn):
     # Initialize figure
     fig = plt.figure()
 
+    imgs[1] = (imgs[1] - np.min(imgs[1])) / (np.ptp(imgs[1]))
+
+    print(f"PREDICT:\n\n\n{imgs[1]}")
+
     # Add the three images as subplots
     for img in range(3):
         sub = fig.add_subplot(1, 3, img+1)
