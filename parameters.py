@@ -1,4 +1,5 @@
-"""Parameters for residual segmentation network.
+"""Parameters for the residual segmentation network in
+   object_segmenter.py.
 
    Copyright 2018 Werner van der Veen
 
@@ -35,32 +36,32 @@ seg_dir = './VOC2012-objects/SegmentationObject/'
 
 # Network parameters
 layer_depth = 1
-block_depth = 5  # minimally 2
-num_hidden = 512
-num_filters = 5
-filter_size = [8, 8]
+block_depth = 3  # minimally 2
+num_hidden = 56
+num_filters = 3
+filter_size = [4, 4]
 dropout_rate = 0.4
 
 # Input parameters
-img_width = 64
-img_height = 64
-max_img = 2000
-batch_size = 1
-train_percentage = 95
+img_width = 92
+img_height = 92
+max_img = 1000
+batch_size = 3
+train_percentage = 90
 
 # Other parameters
 steps = 500
-step_log_interval = 50
+step_log_interval = 10
 num_epochs_train = 30
-num_epochs_eval = 1
+num_epochs_eval = 10
 learning_rate = 0.001
 
 # Hyperparameter optimizer parameters
 hyperparameter1_search = {
-    "Name": "layer_depth",  # choose from 'network parameters'
-    "min_val": 1,
-    "max_val": 4,
-    "step": 1
+    "Name": "num_hidden",  # choose from 'network parameters'
+    "min_val": 10,
+    "max_val": 160,
+    "step": 20
 }
 
 hyperparameter2_search = {
@@ -70,12 +71,13 @@ hyperparameter2_search = {
     "step": 1
 }
 
+
 """ TODO:
 
-Check output normalization
+Check output normalization?
 
-Include Gradient Noise
+Include Gradient Noise?
 
-Include Early Stopping
+Include Early Stopping?
 
 """

@@ -31,18 +31,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress/display warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
 
 
-def get_data():
-    """Read data from file and return as train and test sets containing
-    sampled input and label images.
-    """
-
-    img, seg = utils.read_images()
-
-    train_img, train_seg, test_img, test_seg = utils.sample_images(img, seg)
-
-    return train_img, train_seg, test_img, test_seg
-
-
 def model_fn(features, labels, mode):
     """Model function of the segmentation network.
     The network is an encoder-decoder network with residual connections.
@@ -56,10 +44,12 @@ def model_fn(features, labels, mode):
     # Initialize the main layers of the network.
     # The first half of the network consists out of N dilated
     # convolutions, which are alternated with blocks of M combinations
-    # of same-size convolution and dense layers.
+    # of same-size convolution, batch normalization, dense layers, and
+    # dropout layers.
     # The second half of the network consists out of N upconvolutions
     # and residual connections to corresponding downward layers, again
-    # alternated with M convolution-dense combinations.
+    # alternated with M times convolution-normalization-dense-dropout
+    # combinations.
     shape_layers = []  # 1-D: block indices
     downward_conv_layers = []  # 2-D: block and layer indices
     down_batch_norm = []  # 2-D: block and layer indices
@@ -96,8 +86,10 @@ def model_fn(features, labels, mode):
 
         # Construct the convolution-dense layers of this downward block.
         for layer_idx in range(par.layer_depth):
-            # Convolution layer. Read from previous layer if available.
-            # Else, read from previous block.
+            # Convolution layer. Read from previous layer if available
+            # in this block.
+            # Else, read from the input or dilated convolution layer of
+            # the previous block.
             downward_conv_layers[block_idx].append(tf.layers.conv2d(
                 inputs=down_dropout[block_idx][layer_idx-1]
                 if layer_idx > 0 else shape_layers[block_idx],
@@ -107,7 +99,7 @@ def model_fn(features, labels, mode):
                 padding="same",
                 bias_initializer=tf.random_normal_initializer))
 
-            # Batch Normalization.
+            # Batch Normalization layer.
             down_batch_norm[block_idx].append(tf.layers.batch_normalization(
                 inputs=downward_conv_layers[block_idx][layer_idx],
                 name=f"downw_batch_norm_{block_idx}_{layer_idx}"))
@@ -120,7 +112,7 @@ def model_fn(features, labels, mode):
                 activation=tf.nn.leaky_relu,
                 bias_initializer=tf.random_normal_initializer))
 
-            # Dropout.
+            # Dropout layer.
             down_dropout[block_idx].append(tf.layers.dropout(
                 inputs=downward_dense_layers[block_idx][layer_idx],
                 rate=par.dropout_rate,
@@ -147,7 +139,8 @@ def model_fn(features, labels, mode):
             kernel_size=par.filter_size,
             padding="same"))
 
-        # Construct the convolution-dense layers of this upward block.
+        # Construct the convolution-normalization-dense-dropout layers
+        # of this upward block.
         for layer_idx in range(par.layer_depth):
 
             # Convolution layer. Read from previous layer if available.
@@ -166,7 +159,7 @@ def model_fn(features, labels, mode):
                 padding="same",
                 bias_initializer=tf.random_normal_initializer))
 
-            # Batch Normalization.
+            # Batch Normalization layer.
             up_batch_norm[block_idx].append(tf.layers.batch_normalization(
                 inputs=upward_conv_layers[block_idx][layer_idx],
                 name=f"up_batch_norm_{block_idx}_{layer_idx}"))
@@ -179,13 +172,13 @@ def model_fn(features, labels, mode):
                 activation=tf.sigmoid,
                 bias_initializer=tf.random_normal_initializer))
 
-            # Dropout.
+            # Dropout layer.
             up_dropout[block_idx].append(tf.layers.dropout(
                 inputs=upward_dense_layers[block_idx][layer_idx],
                 rate=par.dropout_rate,
                 name=f"up_dropout_block_{block_idx}_layer_{layer_idx}"))
 
-    # Output dense layer
+    # Output dense layer.
     output_dense = tf.layers.dense(
         inputs=up_dropout[par.block_depth-2][par.layer_depth-1],
         name="dense_output_layer",
@@ -193,21 +186,21 @@ def model_fn(features, labels, mode):
         activation=tf.sigmoid,
         bias_initializer=tf.random_normal_initializer)
 
-    # Final output layer (batch of 2-D images)
+    # Final output layer (batch of 2-D images).
     output = tf.reshape(tensor=output_dense,
                         shape=[-1, par.img_width, par.img_height],
                         name="final_output_layer")
 
-    # Save the output (for PREDICT mode)
+    # Save the output (for PREDICT mode).
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode,
                                           predictions={"output": output})
 
-    # Calculate loss
+    # Calculate loss.
     loss = tf.losses.mean_squared_error(labels=labels,
                                         predictions=output)
 
-    # Configure the training op (for TRAIN mode)
+    # Configure the training op (for TRAIN mode).
     if mode == tf.estimator.ModeKeys.TRAIN:
         optimizer = tf.train.AdamOptimizer(
             learning_rate=par.learning_rate)
@@ -216,7 +209,7 @@ def model_fn(features, labels, mode):
                                       global_step=tf.train.get_global_step(),
                                       name="optimizer")
 
-        # Set up logging
+        # Set up logging.
         logging_hook = tf.train.LoggingTensorHook(
             tensors={"step": "optimizer"}, every_n_iter=par.step_log_interval)
 
@@ -225,7 +218,7 @@ def model_fn(features, labels, mode):
                                           train_op=train_op,
                                           training_hooks=[logging_hook])
 
-    # Add evaluation metrics (for EVAL mode)
+    # Add evaluation metrics (for EVAL mode).
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(labels=labels,
                                         predictions=output)
@@ -262,7 +255,7 @@ def main(config):
 
     else:
         # Standard case. Optionally overwrite existing model by emptying
-        # its directory
+        # its directory, according to the parameters in "parameters.py".
         if par.overwrite_existing_model:
             utils.prepare_dir(par.model_dir, empty=True)
         if par.save_predictions and par.predict:
@@ -274,7 +267,8 @@ def main(config):
     start_time = time.time()
 
     # Load training and testing data
-    train_img, train_seg, test_img, test_seg = get_data()
+    img, seg = utils.read_images()
+    train_img, train_seg, test_img, test_seg = utils.sample_images(img, seg)
 
     # Create the Estimator
     print("Creating Estimator...")
@@ -283,7 +277,7 @@ def main(config):
     print("Creating Estimator completed!\n")
 
     # Train the model
-    print("Training model...")
+    print(f"Training model (for {par.steps} steps)...")
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_img},
         y=train_seg,
@@ -316,10 +310,13 @@ def main(config):
                             label=test_seg[:1],
                             pred_fn=object_segmenter.predict)
 
+    # Optionally plot the convolution layers of the network, according
+    # to the parameters in "parameters.py".
     if par.plot_filters:
         for block_idx in range(par.block_depth):
             print(f"\nPlotting convolution filters for block ",
                   f"{block_idx}/{par.block_depth-1}")
+
             print("\tPlotting dilated convolution filters...")
             if par.plot_layers["dilated_conv"] and block_idx > 0:
                 utils.plot_conv(filters=object_segmenter.get_variable_value(
@@ -337,22 +334,25 @@ def main(config):
             print("\tPlotting convolution filters...")
             for layer_idx in range(par.layer_depth):
                 if par.plot_layers["downward"]:
-                    utils.plot_conv(filters=object_segmenter.get_variable_value(
-                                        f"downw_convo_block_{block_idx}_" +
-                                        f"layer_{layer_idx}/kernel"),
-                                    name=["Downward Convolution", "downward"],
-                                    block=block_idx,
-                                    layer=layer_idx)
+                    utils.plot_conv(
+                        filters=object_segmenter.get_variable_value(
+                                    f"downw_convo_block_{block_idx}_" +
+                                    f"layer_{layer_idx}/kernel"),
+                        name=["Downward Convolution", "downward"],
+                        block=block_idx,
+                        layer=layer_idx)
                 if par.plot_layers["upward"] and block_idx < par.block_depth-1:
-                    utils.plot_conv(filters=object_segmenter.get_variable_value(
-                                        f"upwrd_convo_block_{block_idx}_" +
-                                        f"layer_{layer_idx}/kernel"),
-                                    name=["Upward Convolution", "upward"],
-                                    block=block_idx,
-                                    layer=layer_idx)
+                    utils.plot_conv(
+                        filters=object_segmenter.get_variable_value(
+                                    f"upwrd_convo_block_{block_idx}_" +
+                                    f"layer_{layer_idx}/kernel"),
+                        name=["Upward Convolution", "upward"],
+                        block=block_idx,
+                        layer=layer_idx)
 
+    # If running "hparam.py", return the accuracy to save it.
+    # Else, simply display it.
     return evaluation['accuracy']
-
 
 
 if __name__ == "__main__":

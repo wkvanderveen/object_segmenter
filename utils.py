@@ -28,7 +28,6 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import math
 import errno
-from sklearn.preprocessing import normalize
 from shutil import rmtree
 
 
@@ -160,9 +159,8 @@ def predict_image(input_, label, pred_fn):
     # Initialize figure
     fig = plt.figure()
 
+    # Normalize output
     imgs[1] = (imgs[1] - np.min(imgs[1])) / (np.ptp(imgs[1]))
-
-    print(f"PREDICT:\n\n\n{imgs[1]}")
 
     # Add the three images as subplots
     for img in range(3):

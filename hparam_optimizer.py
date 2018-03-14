@@ -19,7 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tumor_detector
+import object_segmenter
 import parameters as par
 import utils
 import pandas as pd
@@ -73,12 +73,12 @@ for val1 in var1_range:
 
         # Empty the model directory before training the network
         utils.prepare_dir(par.model_dir, empty=True)
-        config = ['tumor_detector.py',
+        config = ['object_segmenter.py',
                   [var1["Name"], val1],
                   [var2["Name"], val2]]
 
         # Run the network and write the results to the results file.
-        accuracy = tumor_detector.main(config)
+        accuracy = object_segmenter.main(config)
         write_to_csv([str(config[1][1]),
                       str(config[2][1]),
                       accuracy])
