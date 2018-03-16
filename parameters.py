@@ -35,22 +35,22 @@ img_dir = './VOC2012-objects/JPEGImages/'
 seg_dir = './VOC2012-objects/SegmentationObject/'
 
 # Network parameters
-layer_depth = 1
+layer_depth = 2
 block_depth = 3  # minimally 2
-num_hidden = 56
+num_hidden = 64
 num_filters = 3
 filter_size = [4, 4]
 dropout_rate = 0.4
 
 # Input parameters
-img_width = 92
-img_height = 92
-max_img = 1000
+img_width = 64
+img_height = 64
+max_img = 400
 batch_size = 3
 train_percentage = 90
 
 # Other parameters
-steps = 500
+steps = 600
 step_log_interval = 10
 num_epochs_train = 30
 num_epochs_eval = 10
@@ -79,5 +79,15 @@ Check output normalization?
 Include Gradient Noise?
 
 Include Early Stopping?
+
+"""
+
+"""
+Input -> Conv -> Dense
+-> downsize -> conv -> dense
+-> upsize -> conv -> dense
+-> dense
+
+Current problem: network doesn't train properly.
 
 """

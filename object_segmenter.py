@@ -79,8 +79,7 @@ def model_fn(features, labels, mode):
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
                 padding="same",
-                dilation_rate=(2, 2),
-                bias_initializer=tf.random_normal_initializer))
+                dilation_rate=(2, 2)))
         else:
             shape_layers.append(input_layer)
 
@@ -96,8 +95,7 @@ def model_fn(features, labels, mode):
                 name=f"downw_convo_block_{block_idx}_layer_{layer_idx}",
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
-                padding="same",
-                bias_initializer=tf.random_normal_initializer))
+                padding="same"))
 
             # Batch Normalization layer.
             down_batch_norm[block_idx].append(tf.layers.batch_normalization(
@@ -109,8 +107,7 @@ def model_fn(features, labels, mode):
                 inputs=down_batch_norm[block_idx][layer_idx],
                 name=f"downw_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
-                activation=tf.nn.leaky_relu,
-                bias_initializer=tf.random_normal_initializer))
+                activation=tf.nn.leaky_relu))
 
             # Dropout layer.
             down_dropout[block_idx].append(tf.layers.dropout(
@@ -156,8 +153,7 @@ def model_fn(features, labels, mode):
                 name=f"upwrd_convo_block_{block_idx}_layer_{layer_idx}",
                 filters=par.num_filters,
                 kernel_size=par.filter_size,
-                padding="same",
-                bias_initializer=tf.random_normal_initializer))
+                padding="same"))
 
             # Batch Normalization layer.
             up_batch_norm[block_idx].append(tf.layers.batch_normalization(
@@ -169,8 +165,7 @@ def model_fn(features, labels, mode):
                 inputs=up_batch_norm[block_idx][layer_idx],
                 name=f"upwrd_dense_block_{block_idx}_layer_{layer_idx}",
                 units=par.num_hidden,
-                activation=tf.sigmoid,
-                bias_initializer=tf.random_normal_initializer))
+                activation=tf.nn.leaky_relu))
 
             # Dropout layer.
             up_dropout[block_idx].append(tf.layers.dropout(
@@ -183,8 +178,7 @@ def model_fn(features, labels, mode):
         inputs=up_dropout[par.block_depth-2][par.layer_depth-1],
         name="dense_output_layer",
         units=1,
-        activation=tf.sigmoid,
-        bias_initializer=tf.random_normal_initializer)
+        activation=tf.sigmoid)
 
     # Final output layer (batch of 2-D images).
     output = tf.reshape(tensor=output_dense,
@@ -202,8 +196,9 @@ def model_fn(features, labels, mode):
 
     # Configure the training op (for TRAIN mode).
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.AdamOptimizer(
-            learning_rate=par.learning_rate)
+        optimizer = tf.train.MomentumOptimizer(
+            learning_rate=par.learning_rate,
+            momentum=0.9)
 
         train_op = optimizer.minimize(loss=loss,
                                       global_step=tf.train.get_global_step(),
@@ -211,7 +206,8 @@ def model_fn(features, labels, mode):
 
         # Set up logging.
         logging_hook = tf.train.LoggingTensorHook(
-            tensors={"step": "optimizer"}, every_n_iter=par.step_log_interval)
+            tensors={"step": "optimizer"},
+            every_n_iter=par.step_log_interval)
 
         return tf.estimator.EstimatorSpec(mode=mode,
                                           loss=loss,
@@ -285,15 +281,22 @@ def main(config):
         num_epochs=par.num_epochs_train,
         shuffle=True)
 
+    summary_hook = tf.train.SummarySaverHook(
+        save_steps=par.step_log_interval,
+        output_dir='./model_data',
+        scaffold=tf.train.Scaffold(),
+        summary_op=tf.summary.merge_all())
+
     object_segmenter.train(input_fn=train_input_fn,
-                           steps=par.steps)
+                           steps=par.steps,
+                           hooks=[summary_hook])
     print("Training model completed!\n")
 
     # Evaluate the model and print results
     print("Evaluating model...")
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={"x": test_img},
-        y=test_seg,
+        x={"x": train_img},
+        y=train_seg,
         num_epochs=par.num_epochs_eval,
         shuffle=True)
 
@@ -306,8 +309,8 @@ def main(config):
 
     # Optionally predict a random test image
     if par.predict:
-        utils.predict_image(input_=test_img[:1],
-                            label=test_seg[:1],
+        utils.predict_image(input_=train_img[:1],
+                            label=train_seg[:1],
                             pred_fn=object_segmenter.predict)
 
     # Optionally plot the convolution layers of the network, according

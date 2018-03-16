@@ -80,15 +80,17 @@ def read_images():
         img = img.astype(float)
 
         # Convert segmentation image to binary color format.
+        seg = (seg - np.min(seg)) / (np.ptp(seg))  # between [0,1]
         seg = np.ceil(np.amax(seg, axis=2))
 
         # Normalize the image values.
         img = (img - np.min(img)) / (np.ptp(img)/2) - 1  # between [-1,1]
-        seg = (seg - np.min(seg)) / (np.ptp(seg))  # between [0,1]
 
         # Append resized images to their respective lists.
         img_list.append(img)
         seg_list.append(seg)
+
+        print(seg)
 
     print("\nReading images completed!\n")
 
@@ -132,12 +134,12 @@ def sample_images(img, seg):
         # Store images in train or test set, depending on whether the
         # limit for the training images is reached.
         if c_train < n_train:
-            train_img[c_train] = img[rand_idx] / 256
-            train_seg[c_train] = seg[rand_idx] / 256
+            train_img[c_train] = img[rand_idx]
+            train_seg[c_train] = seg[rand_idx]
             c_train += 1
         else:
-            test_img[c_test] = img[rand_idx] / 256
-            test_seg[c_test] = seg[rand_idx] / 256
+            test_img[c_test] = img[rand_idx]
+            test_seg[c_test] = seg[rand_idx]
             c_test += 1
 
     print("\nSampling images completed!\n")
