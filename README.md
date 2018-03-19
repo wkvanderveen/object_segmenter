@@ -1,8 +1,8 @@
 # bachpro
 
-(NOTE: This is a work in progress. The network may not always work correctly. If you want a working version, it's best to pull the most recent version that has "Working Version" in the commit message.)
-
 This is a residual segmentation network. It is used to detect objects in the VOC2012 dataset.
+
+The parameters of the network have not yet been optimized yet, and it is not expected to perform at state-of-the-art level. The intention of this network is to show how deep residual neural networks can be implemented in a straightforward way.
 
 ## Structure
 

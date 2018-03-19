@@ -21,11 +21,11 @@ from __future__ import division
 from __future__ import print_function
 
 # Imports
-import tensorflow as tf
-import parameters as par
-import utils
 import time
 import os
+import utils
+import parameters as par
+import tensorflow as tf
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'    # suppress/display warnings
 tf.logging.set_verbosity(tf.logging.INFO)   # display tensorflow info
@@ -226,6 +226,8 @@ def model_fn(features, labels, mode):
 
 
 def main(config):
+    """The main function for the object segmenter network."""
+
     # If config contains additional parameters, we are doing grid search
     # for hyperparameters. In this case, overwrite relevant parameters
     # from 'par' module, and reduce verbosity.
@@ -234,19 +236,19 @@ def main(config):
         par.save_predictions = True
         par.plot_filters = False
         for [par_name, par_value] in config[1:]:
-            if par_name is "num_hidden":
+            if par_name == "num_hidden":
                 par.num_hidden = par_value
-            if par_name is "num_filters":
+            if par_name == "num_filters":
                 par.num_filters = par_value
-            if par_name is "layer_depth":
+            if par_name == "layer_depth":
                 par.layer_depth = par_value
-            if par_name is "block_depth":
+            if par_name == "block_depth":
                 par.block_depth = par_value
-            if par_name is "filter_size":
+            if par_name == "filter_size":
                 par.filter_size = [par_value, par_value]
-            if par_name is "dropout_rate":
+            if par_name == "dropout_rate":
                 par.dropout_rate = par_value
-            if par_name is "optimizer":
+            if par_name == "optimizer":
                 par.optimizer = par_value
 
     else:
@@ -295,8 +297,8 @@ def main(config):
     # Evaluate the model and print results
     print("Evaluating model...")
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={"x": train_img},
-        y=train_seg,
+        x={"x": test_img},
+        y=test_seg,
         num_epochs=par.num_epochs_eval,
         shuffle=True)
 
@@ -322,33 +324,36 @@ def main(config):
 
             print("\tPlotting dilated convolution filters...")
             if par.plot_layers["dilated_conv"] and block_idx > 0:
-                utils.plot_conv(filters=object_segmenter.get_variable_value(
-                                    f"shape_layer_block_{block_idx}/kernel"),
-                                name=["Dilated Convolution", "dilconv"],
-                                block=block_idx)
+                utils.plot_conv(
+                    filters=object_segmenter.get_variable_value(
+                        f"shape_layer_block_{block_idx}/kernel"),
+                    name=["Dilated Convolution", "dilconv"],
+                    block=block_idx)
 
             print("\tPlotting upconvolution filters...")
             if par.plot_layers["upconv"] and block_idx < par.block_depth-1:
-                utils.plot_conv(filters=object_segmenter.get_variable_value(
-                                    f"upconv_layer_block_{block_idx}/kernel"),
-                                name=["Upconvolution", "upconv"],
-                                block=block_idx)
+                utils.plot_conv(
+                    filters=object_segmenter.get_variable_value(
+                        f"upconv_layer_block_{block_idx}/kernel"),
+                    name=["Upconvolution", "upconv"],
+                    block=block_idx)
 
             print("\tPlotting convolution filters...")
             for layer_idx in range(par.layer_depth):
                 if par.plot_layers["downward"]:
                     utils.plot_conv(
                         filters=object_segmenter.get_variable_value(
-                                    f"downw_convo_block_{block_idx}_" +
-                                    f"layer_{layer_idx}/kernel"),
+                            f"downw_convo_block_{block_idx}_" +
+                            f"layer_{layer_idx}/kernel"),
                         name=["Downward Convolution", "downward"],
                         block=block_idx,
                         layer=layer_idx)
+
                 if par.plot_layers["upward"] and block_idx < par.block_depth-1:
                     utils.plot_conv(
                         filters=object_segmenter.get_variable_value(
-                                    f"upwrd_convo_block_{block_idx}_" +
-                                    f"layer_{layer_idx}/kernel"),
+                            f"upwrd_convo_block_{block_idx}_" +
+                            f"layer_{layer_idx}/kernel"),
                         name=["Upward Convolution", "upward"],
                         block=block_idx,
                         layer=layer_idx)

@@ -18,7 +18,7 @@
 
 # Information & diagnostics parameters
 predict = True
-save_predictions = False  # 'True' in hyperparameter optimization
+save_predictions = True  # 'True' in hyperparameter optimization
 overwrite_existing_model = True  # 'True' in hyperparameter optimization
 plot_filters = False  # 'False' in hyperparameter optimization
 overwrite_existing_plot = True
@@ -50,7 +50,7 @@ batch_size = 3
 train_percentage = 90
 
 # Other parameters
-steps = 600
+steps = 100
 step_log_interval = 10
 num_epochs_train = 30
 num_epochs_eval = 10
@@ -70,24 +70,3 @@ hyperparameter2_search = {
     "max_val": 4,
     "step": 1
 }
-
-
-""" TODO:
-
-Check output normalization?
-
-Include Gradient Noise?
-
-Include Early Stopping?
-
-"""
-
-"""
-Input -> Conv -> Dense
--> downsize -> conv -> dense
--> upsize -> conv -> dense
--> dense
-
-Current problem: network doesn't train properly.
-
-"""

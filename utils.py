@@ -20,22 +20,25 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import cv2
-import numpy as np
-import parameters as par
-import random as rand
-import tensorflow as tf
-import matplotlib.pyplot as plt
 import math
 import errno
+import random as rand
 from shutil import rmtree
+import numpy as np
+import parameters as par
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import cv2
+
+# To ignore false numpy member errors in PyLint:
+#     pylint: disable=E1101
 
 
 def read_images():
-
-    # Set directories containing the images and segmentation objects.
-    # Initialize the lists where the input and segmentation images will
-    # be stored.
+    """Set directories containing the images and segmentation objects.
+    Initialize the lists where the input and segmentation images will be
+    stored.
+    """
     img_list = []
     seg_list = []
 
@@ -90,15 +93,15 @@ def read_images():
         img_list.append(img)
         seg_list.append(seg)
 
-        print(seg)
-
     print("\nReading images completed!\n")
 
     return img_list, seg_list
 
 
 def sample_images(img, seg):
-    # Initialize numpy arrays
+    """Randomly divide the image and segmentation images into training
+    and testing sets.
+    """
     n_files = len(img)
     n_train = int(par.train_percentage / 100 * n_files)
     n_test = n_files - n_train
@@ -199,8 +202,8 @@ def plot_conv(filters, name, block, layer=None):
 
     fig.suptitle(f"{name[0]} filters for block {block}" +
                  ("" if layer is None else f" and layer {layer}"))
-    fig.text(0, 0, (f"number of filters: {n_filters}\nfilter size: ",
-                    f"{filters.shape[0]}x{filters.shape[1]}"))
+    fig.text(0, 0, f"number of filters: {n_filters}\nfilter size: " +
+                   f"{filters.shape[0]}x{filters.shape[1]}")
 
     # Iterate over subplots and plot image of filter or convolution
     for filt, axis in enumerate(axes.flat):
@@ -237,13 +240,13 @@ def empty_dir(path):
                 os.unlink(file_path)
             elif os.path.isdir(file_path):
                 rmtree(file_path)
-        except Exception as e:
-            print('Warning: {}'.format(e))
+        except OSError as os_error:
+            print(f"Error in emptying directory {path}:\n{os_error}")
 
 
-def get_grid_dim(x):
-    """Transform x into product of two integers."""
-    factors = prime_powers(x)
+def get_grid_dim(num):
+    """Transform a number into product of two integers."""
+    factors = prime_powers(num)
     if len(factors) % 2 == 0:
         i = int(len(factors) / 2)
         return factors[i], factors[i - 1]
@@ -252,13 +255,13 @@ def get_grid_dim(x):
     return factors[i], factors[i]
 
 
-def prime_powers(n):
+def prime_powers(num):
     """Compute the factors of a positive integer."""
     factors = set()
-    for x in range(1, int(math.sqrt(n)) + 1):
-        if n % x == 0:
-            factors.add(int(x))
-            factors.add(int(n // x))
+    for possible_factor in range(1, int(math.sqrt(num)) + 1):
+        if num % possible_factor == 0:
+            factors.add(int(possible_factor))
+            factors.add(int(num // possible_factor))
     return sorted(factors)
 
 

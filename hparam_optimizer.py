@@ -19,22 +19,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import csv
+import os
 import object_segmenter
 import parameters as par
 import utils
 import pandas as pd
-import csv
-import os
 
 # Set filename of csv file containing the search results
-filename = 'results.csv'
+FILENAME = 'results.csv'
 
-var1 = par.hyperparameter1_search
-var2 = par.hyperparameter2_search
+VAR1 = par.hyperparameter1_search
+VAR2 = par.hyperparameter2_search
 
 # Overwrite the results file if it already exists
-if os.path.isfile(f"./{filename}"):
-    os.remove(f"./{filename}")
+if os.path.isfile(f"./{FILENAME}"):
+    os.remove(f"./{FILENAME}")
 
 # Empty the folder where the prediction plots will be stored
 utils.prepare_dir(par.pred_dir, empty=True)
@@ -42,8 +42,8 @@ utils.prepare_dir(par.pred_dir, empty=True)
 
 def write_to_csv(row):
     """Write a text row to a csv file."""
-    with open(filename, 'a', newline='') as f:
-        writer = csv.writer(f,
+    with open(FILENAME, 'a', newline='') as file:
+        writer = csv.writer(file,
                             delimiter=',',
                             quotechar='|',
                             quoting=csv.QUOTE_MINIMAL)
@@ -51,31 +51,31 @@ def write_to_csv(row):
 
 
 # Write the column titles to the results file.
-write_to_csv([var1['Name'], var2['Name'], 'Accuracy'])
+write_to_csv([VAR1['Name'], VAR2['Name'], 'Accuracy'])
 
 # Set a counter for terminal progress printing
-run_count = 0
+RUN_COUNT = 0
 
-var1_range = range(var1["min_val"], var1["max_val"]+var1["step"], var1["step"])
-var2_range = range(var2["min_val"], var2["max_val"]+var2["step"], var2["step"])
+VAR1_RANGE = range(VAR1["min_val"], VAR1["max_val"]+VAR1["step"], VAR1["step"])
+VAR2_RANGE = range(VAR2["min_val"], VAR2["max_val"]+VAR2["step"], VAR2["step"])
 
-for val1 in var1_range:
-    for val2 in var2_range:
-        run_count += 1
+for val1 in VAR1_RANGE:
+    for val2 in VAR2_RANGE:
+        RUN_COUNT += 1
 
         # Print a box containing progress information
         utils.print_big_title(["Hyperoptimization:",
-                               f"Progress: {run_count}/" +
-                               str(len(var1_range)*len(var2_range)),
+                               f"Progress: {RUN_COUNT}/" +
+                               str(len(VAR1_RANGE)*len(VAR2_RANGE)),
                                f"Now testing with:",
-                               f"  {var1['Name']} = {val1},",
-                               f"  {var2['Name']} = {val2}"])
+                               f"  {VAR1['Name']} = {val1},",
+                               f"  {VAR2['Name']} = {val2}"])
 
         # Empty the model directory before training the network
         utils.prepare_dir(par.model_dir, empty=True)
         config = ['object_segmenter.py',
-                  [var1["Name"], val1],
-                  [var2["Name"], val2]]
+                  [VAR1["Name"], val1],
+                  [VAR2["Name"], val2]]
 
         # Run the network and write the results to the results file.
         accuracy = object_segmenter.main(config)
@@ -83,10 +83,10 @@ for val1 in var1_range:
                       str(config[2][1]),
                       accuracy])
         print(f"The accuracy of this configuration is {accuracy:.4f}",
-              f"and has been appended to the {filename} file.")
+              f"and has been appended to the {FILENAME} file.")
 
 utils.print_big_title(["Results of hyperparameter optimization"])
 
 # Construct a pretty-print data frame and sort by 'Accuracy'.
-df = pd.DataFrame(pd.read_csv(filename))
-print(df.sort_values(by=['Accuracy'], ascending=False))
+DATAFRAME = pd.DataFrame(pd.read_csv(FILENAME))
+print(DATAFRAME.sort_values(by=['Accuracy'], ascending=False))
