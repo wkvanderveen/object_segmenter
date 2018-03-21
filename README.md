@@ -1,4 +1,4 @@
-# bachpro
+# object_segmenter
 
 This is a residual segmentation network. It is used to detect objects in the VOC2012 dataset.
 
